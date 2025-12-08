@@ -1,19 +1,18 @@
 #!/bin/bash
 
 # This script does the following:
-# 0. If indicated by environent variables, look for DBMS-supplied Python
+# 0. If indicated by environment variables, look for DBMS-supplied Python
 #    installation. E.g., Greenplum supplies its own Python, and its currently
 #    the first choice to use because it guarantees that python, pygresql
 #    (currently needed to connect to a GP database), and libpg all have the same
 #    architecture.
 # 1. Of step 0 failed, find python interpreter by
-#    - first looking for "python${VERSION}" in $PATH where
-#      ${VERSION} in {2.7, 2.6}
+#    - first looking for "python${VERSION}" in $PATH
 #    - Only if that fails, look for "python" in $PATH
 # 2. Pass all arguments to ../madpack/madpack.py
 
 PYTHON_PREFIX="python"
-PYTHON_VERSIONS="2.7 2.6 3"
+PYTHON_VERSIONS="TARGET_PYTHON_VERSION"
 
 # create absolute path to madpack.py
 pushd `dirname $0` > /dev/null
@@ -33,8 +32,7 @@ if test "$GPHOME" && test "$PYTHONHOME" && \
 fi
 
 errorNoPythonFound() {
-    echo "No Python interpreter found. Please install Python 2.6 or higher to" \
-        "run madpack."
+    echo "No Python interpreter found. Please install Python TARGET_PYTHON_VERSION to run madpack."
     exit 1
 }
 
