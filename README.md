@@ -22,7 +22,7 @@ also on the wiki.
 
 Development with Docker
 =======================
-We provide a Docker image with necessary dependencies required to compile and test MADlib on PostgreSQL 10.5. You can view the dependency Docker file at ./tool/docker/base/Dockerfile_ubuntu16_postgres10. The image is hosted on Docker Hub at madlib/postgres_10:latest. Later we will provide a similar Docker image for Greenplum Database.
+We provide a Docker image with necessary dependencies required to compile and test MADlib on PostgreSQL 10.5. You can view the dependency Docker file at ./tool/docker/base/Dockerfile_ubuntu16_postgres10. The image is hosted on Docker Hub at madlib/postgres_10:latest. Later we will provide a similar Docker image for WarehousePG Database.
 
 We provide a script to quickly run this docker image at ./tool/docker_start.sh, which will mount your local madlib directory, build MADlib and run install check on this Docker image. At the end, it will `docker exec` as postgres user. Note that you have to run this script from inside your madlib directory, and you can specify your docker CONTAINER_NAME (default is madlib) and IMAGE_TAG (default is latest). Here is an example:
 
