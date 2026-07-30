@@ -561,7 +561,7 @@ Datum svec_cast_float8arr(PG_FUNCTION_ARGS) {
 	ArrayType *A_PG = PG_GETARG_ARRAYTYPE_P(0);
 	SvecType *output_svec;
 	float8 *array_temp;
-	bits8 *bitmap;
+	uint8 *bitmap;
 	int bitmask;
 	int i,j;
 
@@ -705,8 +705,8 @@ static bool float8arr_equals_internal(ArrayType *left, ArrayType *right)
 	int numright = ArrayGetNItems(dimright,dimsright);
         double *vals_left = (double *)ARR_DATA_PTR(left);
 	double *vals_right = (double *)ARR_DATA_PTR(right);
-        bits8 *bitmap_left = ARR_NULLBITMAP(left);
-	bits8 *bitmap_right = ARR_NULLBITMAP(right);
+        uint8 *bitmap_left = ARR_NULLBITMAP(left);
+	uint8 *bitmap_right = ARR_NULLBITMAP(right);
         int bitmask = 1;
 
         if ((dimsleft!=dimsright) || (numleft!=numright))
@@ -768,7 +768,7 @@ SparseData sdata_uncompressed_from_float8arr_internal(ArrayType *array)
         int *dims = ARR_DIMS(array);
 	int num = ArrayGetNItems(dim,dims);
         double *vals =(double *)ARR_DATA_PTR(array);
-        bits8 *bitmap = ARR_NULLBITMAP(array);
+        uint8 *bitmap = ARR_NULLBITMAP(array);
         int   bitmask=1;
 
 	/* Convert null items into NVPs */

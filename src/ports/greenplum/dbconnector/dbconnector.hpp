@@ -14,6 +14,7 @@
 
 extern "C" {
     #include <postgres.h>
+    #include <access/htup_details.h> // for heap_form_tuple(), GETSTRUCT(), HeapTupleHeaderGet*() - no longer pulled in transitively on PG19
     #include <funcapi.h>
     #include <catalog/pg_proc.h>
     #include <catalog/pg_type.h>
@@ -26,6 +27,7 @@ extern "C" {
     #include <utils/regproc.h>    // needed for format_procedure()
 #endif
     #include <utils/datum.h>
+    #include <utils/hsearch.h>     // for hash_create()/hash_search() - no longer pulled in transitively on PG19
     #include <utils/lsyscache.h>   // for type lookup, e.g., type_is_rowtype
     #include <utils/memutils.h>
     #include <utils/syscache.h>    // for direct access to catalog, e.g., SearchSysCache()

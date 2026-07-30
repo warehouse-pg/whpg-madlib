@@ -1558,7 +1558,7 @@ General_Array_to_Element(
     int i = 0;
     int null_count = 0;
     if(ARR_HASNULL(v)){
-        bits8 *bitmap = ARR_NULLBITMAP(v);
+        uint8 *bitmap = ARR_NULLBITMAP(v); /* bits8 was removed on PG19; ARR_NULLBITMAP() now returns uint8* */
         int bitmask = 1;
         for (i = 0; i < nitems; i++) {
             /* Get elements, checking for NULL */
@@ -1653,7 +1653,7 @@ static Datum General_Array_to_Struct(ArrayType *v, void *init_val,
     int null_count = 0;
     int *lbs = ARR_LBOUND(v);
     if(ARR_HASNULL(v)){
-        bits8 *bitmap = ARR_NULLBITMAP(v);
+        uint8 *bitmap = ARR_NULLBITMAP(v); /* bits8 was removed on PG19; ARR_NULLBITMAP() now returns uint8* */
         int bitmask = 1;
         for (i = 0; i < nitems; i++) {
             /* Get elements, checking for NULL */

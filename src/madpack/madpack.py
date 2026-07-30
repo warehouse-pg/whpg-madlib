@@ -188,8 +188,15 @@ def _run_m4_and_append(schema, maddir_mod_py, module, sqlfile,
                   '-DMODULE_NAME=' + module,
                   '-I' + maddir_madpack,
                   sqlfile]
-        if ( (portid == 'postgres') &
-             (is_rev_gte(get_rev_num(dbver), get_rev_num('14.0'))) ):
+        # USE_COMPATIBLE_ARRAY works around array_cat() and friends moving
+        # from anyarray to anycompatiblearray typing upstream (PG14+), which
+        # breaks CREATE AGGREGATE's SFUNC resolution. This was previously
+        # gated on portid == 'postgres' under the assumption that Greenplum
+        # forks always lag behind vanilla PG's catalog API - true for
+        # GP6/GP7 (dbver 6/7, well under the 14.0 threshold either way), but
+        # false for WHPG19 (dbver 19, tracking modern PG). Key off the
+        # detected version alone so both ports pick this up correctly.
+        if is_rev_gte(get_rev_num(dbver), get_rev_num('14.0')):
             m4args = ['m4',
                   '-P',
                   '-DMADLIB_SCHEMA=' + schema,
@@ -1463,6 +1470,12 @@ def main(argv):
                   "default to newest supported version of {DBMS} "
                   "({version}).".format(DBMS=ports[portid]['name'],
                                         version=dbver), True)
+            # dbver_split is read unconditionally below by
+            # set_dynamic_library_path_in_database(); it was previously only
+            # set in the `else` branch, causing an UnboundLocalError whenever
+            # this fallback path was taken (e.g. get_dbver() failing to parse
+            # a rebranded version banner).
+            dbver_split = get_rev_num(dbver)
         else:
             info_(this, "Detected %s version %s." % (ports[portid]['name'], dbver),
                   True)

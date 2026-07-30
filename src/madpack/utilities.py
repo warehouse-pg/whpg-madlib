@@ -188,7 +188,27 @@ def get_dbver(con_args, portid):
         elif portid == 'greenplum':
             # for Greenplum the 3rd digit is necessary to differentiate
             # 4.3.5+ from versions < 4.3.5
-            match = re.search("Greenplum[a-zA-Z\s]*(\d+\.\d+\.\d+)", versionStr)
+            #
+            # Neither the product name nor its position in the banner is safe
+            # to depend on. Compare GP7 with a PG19-based build:
+            #   "PostgreSQL 12.12 (Greenplum Database 7.0.0-beta.0 build dev)
+            #    on aarch64-..., compiled by gcc ..."
+            #   "PostgreSQL 19beta1 on aarch64-..., compiled by gcc (GCC)
+            #    11.5.0 20240719 (Red Hat 11.5.0-14), 64-bit
+            #    (Greenplum Database) 19.0.0 build dev compiled on ..."
+            # The product name moved out of the version's own parentheses and
+            # the whole clause moved behind the platform/compiler text, and the
+            # displayed name is not settled either (the same server reports
+            # PACKAGE_NAME "PostgreSQL" and trails the banner with
+            # "WarehousePG"). What every Greenplum-family banner does share is
+            # the "<version> build <buildid>" token, which vanilla PostgreSQL
+            # never emits - so key off that, and keep the old product-anchored
+            # form (widened from [a-zA-Z\s]* to any non-digit filler so it can
+            # skip punctuation such as ')') only as a fallback. Requiring the
+            # " build " suffix is also what stops the compiler version in
+            # "(Red Hat 11.5.0-14)" from being picked up.
+            match = (re.search(r"(\d+\.\d+\.\d+)\S*\s+build\s", versionStr) or
+                     re.search(r"Greenplum\D*(\d+\.\d+\.\d+)", versionStr))
         return None if match is None else match.group(1)
     except Exception:
         error_(this, "Failed reading database version", True)
