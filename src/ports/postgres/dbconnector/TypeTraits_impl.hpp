@@ -142,10 +142,22 @@ struct TypeTraits<float>{
     WITH_TO_CXX_CONVERSION( DatumGetFloat4(value) );
 };
 
+// pg_config.h's ALIGNOF_* macros are emitted by whichever type-probe list the
+// build (configure/meson) used; some newer builds (e.g. WHPG19, meson-based)
+// dropped ALIGNOF_LONG in favor of the fixed-width ALIGNOF_INT64_T, while
+// others (e.g. GP7/PG12, autoconf-based) still only define ALIGNOF_LONG. On
+// every LP64 platform MADlib targets, long and int64_t share alignment, so
+// feature-test rather than pin to a version threshold.
+#ifdef ALIGNOF_LONG
+#define MADLIB_ALIGNOF_INT64 ALIGNOF_LONG
+#else
+#define MADLIB_ALIGNOF_INT64 ALIGNOF_INT64_T
+#endif
+
 template <>
 struct TypeTraits<int64_t> : public TypeTraitsBase<int64_t> {
     enum { oid = INT8OID };
-    enum { alignment = ALIGNOF_LONG };
+    enum { alignment = MADLIB_ALIGNOF_INT64 };
     WITH_TO_PG_CONVERSION( Int64GetDatum(value) );
     WITH_TO_CXX_CONVERSION( DatumGetInt64(value) );
 };
@@ -153,7 +165,7 @@ struct TypeTraits<int64_t> : public TypeTraitsBase<int64_t> {
 template <>
 struct TypeTraits<uint64_t> : public TypeTraitsBase<uint64_t> {
     enum { oid = INT8OID };
-    enum { alignment = ALIGNOF_LONG };
+    enum { alignment = MADLIB_ALIGNOF_INT64 };
     WITH_TO_PG_CONVERSION(
         Int64GetDatum((convertTo<uint64_t, int64_t>(value)))
     );
@@ -234,8 +246,11 @@ struct TypeTraits<std::string> {
     WITH_TO_PG_CONVERSION(PointerGetDatum(
             cstring_to_text_with_len(value.data(),
                                      static_cast<int>(value.size()))));
-    WITH_TO_CXX_CONVERSION(std::string(VARDATA_ANY(value),
-                                       VARSIZE_ANY(value) - VARHDRSZ));
+    // VARDATA_ANY()/VARSIZE_ANY() are typed inline functions taking
+    // `const void*` on PG19 (previously loose macros); a raw Datum no longer
+    // converts implicitly and needs DatumGetPointer() first.
+    WITH_TO_CXX_CONVERSION(std::string(VARDATA_ANY(DatumGetPointer(value)),
+                                       VARSIZE_ANY(DatumGetPointer(value)) - VARHDRSZ));
 };
 
 template <>

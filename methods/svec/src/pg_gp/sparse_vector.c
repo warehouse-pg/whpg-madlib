@@ -197,7 +197,7 @@ SvecType * svec_in_internal(char * str)
 	int32_t num_values,total_value_count;
 	SparseData sdata;
 	SvecType *result;
-	bits8 *bitmap;
+	uint8 *bitmap;
 	int bitmask;
 	int i,j;
 

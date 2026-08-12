@@ -932,19 +932,28 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.training_preprocessor_dl(
 $$ LANGUAGE plpython3u VOLATILE
 m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `MODIFIES SQL DATA', `');
 
+-- Builtin array_cat() was retyped from anyarray to anycompatiblearray
+-- upstream (PG13+), which CREATE AGGREGATE's SFUNC resolution against a
+-- concrete STYPE (REAL[]/SMALLINT[]) can no longer bind to. Provide a local
+-- anyarray-typed wrapper over the same internal C implementation so the
+-- aggregates below keep resolving.
+DROP FUNCTION IF EXISTS MADLIB_SCHEMA.__internal_array_cat(anyarray, anyarray);
+CREATE FUNCTION MADLIB_SCHEMA.__internal_array_cat(anyarray, anyarray)
+RETURNS anyarray AS 'array_cat' LANGUAGE internal IMMUTABLE STRICT;
+
 -- aggregation for independent var
 DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.agg_array_concat(REAL[]);
 CREATE AGGREGATE MADLIB_SCHEMA.agg_array_concat(REAL[]) (
-   SFUNC = array_cat,
-   PREFUNC = array_cat,
+   SFUNC = MADLIB_SCHEMA.__internal_array_cat,
+   PREFUNC = MADLIB_SCHEMA.__internal_array_cat,
    STYPE = REAL[]
    );
 
 -- aggregation for dependent var
 DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.agg_array_concat(SMALLINT[]);
 CREATE AGGREGATE MADLIB_SCHEMA.agg_array_concat(SMALLINT[]) (
-   SFUNC = array_cat,
-   PREFUNC = array_cat,
+   SFUNC = MADLIB_SCHEMA.__internal_array_cat,
+   PREFUNC = MADLIB_SCHEMA.__internal_array_cat,
    STYPE = SMALLINT[]
    );
 

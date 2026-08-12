@@ -320,7 +320,11 @@ bytea *sketch_md5_bytea(Datum dat, Oid typOid)
         return md5_of_0;
     }
     else{
-        #if defined(GP_VERSION_NUM) || PG_VERSION_NUM < 150000
+        /* GP_VERSION_NUM alone no longer implies the pre-PG15 3-arg
+         * pg_md5_hash() signature: WHPG19's common/md5.h tracks modern
+         * upstream PG and already takes the errstr out-param. Key off
+         * PG_VERSION_NUM only. */
+        #if PG_VERSION_NUM < 150000
         pg_md5_hash(datp, len, outbuf);
         #else
         const char *errstr = NULL;

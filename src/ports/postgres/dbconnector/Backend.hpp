@@ -19,9 +19,26 @@ namespace {
 MADLIB_WRAP_PG_FUNC(
     bool, type_is_array, (Oid typid), (typid))
 
-MADLIB_WRAP_PG_FUNC(
-    AclResult, pg_proc_aclcheck, (Oid proc_oid, Oid roleid, AclMode mode),
-    (proc_oid, roleid, mode))
+// pg_proc_aclcheck() was removed and folded into the generic object_aclcheck()
+// (catalog-agnostic ACL check) around PG18. Older ports (e.g. GP7/PG12) only
+// have pg_proc_aclcheck(); newer ones (e.g. WHPG19/PG19) only have
+// object_aclcheck(). Keep the madlib_pg_proc_aclcheck() wrapper name stable
+// for existing callers by hand-writing the wrapper instead of using
+// MADLIB_WRAP_PG_FUNC (which assumes the wrapped and wrapper names share a
+// root), and pick the underlying call by version.
+inline
+AclResult
+madlib_pg_proc_aclcheck(Oid proc_oid, Oid roleid, AclMode mode) {
+    AclResult _result = static_cast<AclResult>(0);
+    MADLIB_PG_TRY {
+#if PG_VERSION_NUM >= 180000
+        _result = object_aclcheck(ProcedureRelationId, proc_oid, roleid, mode);
+#else
+        _result = pg_proc_aclcheck(proc_oid, roleid, mode);
+#endif
+    } MADLIB_PG_DEFAULT_CATCH_AND_END_TRY;
+    return _result;
+}
 
 MADLIB_WRAP_PG_FUNC(
     void*, MemoryContextAlloc, (MemoryContext context, Size size),
@@ -78,8 +95,10 @@ MADLIB_WRAP_PG_FUNC(
 // Calls to SearchSysCache and related functions have been wrapped using macros
 // with commit e26c539e by Robert Haas <rhaas@postgresql.org>
 // on Sun, 14 Feb 2010 18:42:19 UTC. First release: PG9.0.
+// cacheId is a strictly-typed SysCacheIdentifier enum on PG19 (was a plain
+// int); -fpermissive no longer allows the implicit int->enum conversion.
 MADLIB_WRAP_PG_FUNC(
-    HeapTuple, SearchSysCache1, (int cacheId, Datum key1), (cacheId, key1))
+    HeapTuple, SearchSysCache1, (SysCacheIdentifier cacheId, Datum key1), (cacheId, key1))
 
 MADLIB_WRAP_PG_FUNC(
     TupleDesc, lookup_rowtype_tupdesc_copy, (Oid type_id, int32 typmod),
@@ -89,7 +108,7 @@ MADLIB_WRAP_VOID_PG_FUNC(
     ReleaseSysCache, (HeapTuple tuple), (tuple))
 
 MADLIB_WRAP_PG_FUNC(
-    Datum, SysCacheGetAttr, (int cacheId, HeapTuple tup,
+    Datum, SysCacheGetAttr, (SysCacheIdentifier cacheId, HeapTuple tup,
         AttrNumber attributeNumber, bool* isNull),
     (cacheId, tup, attributeNumber, isNull))
 
@@ -111,8 +130,12 @@ madlib_InitFunctionCallInfoData(FunctionCallInfoBaseData& fcinfo,
 madlib_InitFunctionCallInfoData(FunctionCallInfoData& fcinfo,
 #endif
 
-    FmgrInfo* flinfo, short nargs, Oid fncollation, fmNodePtr context,
-    fmNodePtr resultinfo) {
+    // fmNodePtr was an opaque placeholder typedef supplied by older
+    // PostgreSQL's fmgr.h to avoid a circular include on Node; PG19's fmgr.h
+    // types these fields directly as Node* now that the forward declaration
+    // is safe, and no longer defines fmNodePtr at all.
+    FmgrInfo* flinfo, short nargs, Oid fncollation, Node* context,
+    Node* resultinfo) {
 
 #if PG_VERSION_NUM >= 90100
     // Collation support has been added to PostgreSQL with commit

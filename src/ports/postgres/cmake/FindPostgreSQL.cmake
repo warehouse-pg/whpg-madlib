@@ -163,7 +163,26 @@ if(${PKG_NAME}_PG_CONFIG AND ${PKG_NAME}_SERVER_INCLUDE_DIR)
               "server include dir (${${PKG_NAME}_SERVER_INCLUDE_DIR}).")
     endif(EXISTS ${CONFIG_FILE})
 
-    if(_PACKAGE_NAME STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
+    # Decide which product family a pg_config belongs to from GP_VERSION_NUM
+    # rather than from the PACKAGE_NAME string. PACKAGE_NAME is a display name
+    # that a derivative may set to anything (some builds report "PostgreSQL"
+    # even though they are Greenplum-family, and the branding is not settled),
+    # whereas GP_VERSION_NUM is only ever defined by Greenplum-family servers.
+    # Keying off the macro keeps port detection correct whatever PACKAGE_NAME
+    # ends up saying, in both directions: such an install is claimed by the
+    # Greenplum port and never mistaken for vanilla PostgreSQL. Non-Greenplum
+    # installs keep the previous PACKAGE_NAME-based behaviour untouched.
+    set(_PACKAGE_FAMILY "${_PACKAGE_NAME}")
+    if(_PG_CONFIG_HEADER_CONTENTS MATCHES "#define GP_VERSION_NUM [0-9]+")
+        set(_PACKAGE_FAMILY "Greenplum Database")
+        if(NOT _PACKAGE_NAME STREQUAL "${_PACKAGE_FAMILY}")
+            message(STATUS "\"${CONFIG_FILE}\" reports PACKAGE_NAME "
+                "\"${_PACKAGE_NAME}\" but defines GP_VERSION_NUM; treating it "
+                "as ${_PACKAGE_FAMILY} for port detection.")
+        endif()
+    endif()
+
+    if(_PACKAGE_FAMILY STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
         if((NOT DEFINED PACKAGE_FIND_VERSION) OR
             (PACKAGE_FIND_VERSION VERSION_EQUAL
             "${${PKG_NAME}_VERSION_MAJOR}.${${PKG_NAME}_VERSION_MINOR}"))
@@ -198,7 +217,7 @@ if(${PKG_NAME}_PG_CONFIG AND ${PKG_NAME}_SERVER_INCLUDE_DIR)
 			  "was requested.")
 		  endif(${PACKAGE_FIND_VERSION})
         endif()
-    else(_PACKAGE_NAME STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
+    else(_PACKAGE_FAMILY STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
 	  if(${PACKAGE_FIND_VERSION})
         # There are DBMSs derived from PostgreSQL that also contain pg_config.
         # So there might be many pg_config installed on a system.
@@ -207,7 +226,7 @@ if(${PKG_NAME}_PG_CONFIG AND ${PKG_NAME}_SERVER_INCLUDE_DIR)
           "where ${_NEEDED_PG_CONFIG_PACKAGE_NAME} ${PACKAGE_FIND_VERSION} "
 		  "was requested.")
 	  endif(${PACKAGE_FIND_VERSION})
-    endif(_PACKAGE_NAME STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
+    endif(_PACKAGE_FAMILY STREQUAL "${_NEEDED_PG_CONFIG_PACKAGE_NAME}")
 endif(${PKG_NAME}_PG_CONFIG AND ${PKG_NAME}_SERVER_INCLUDE_DIR)
 
 # Checks 'REQUIRED', 'QUIET' and versions. Note that the first parameter is
