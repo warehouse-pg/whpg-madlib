@@ -155,6 +155,18 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     if (SSE_DISABLE_OPTIONS_AVAILABLE)
         set(SSE_DISABLE_OPTIONS "-mno-sse2")
     endif()
+    # PowerPC counterpart.  The bundled Eigen (branches/3.2) selects its AltiVec
+    # backend whenever the compiler defines __ALTIVEC__, and that backend only
+    # knows big-endian lane order: little-endian support did not land until
+    # Eigen 3.3.  On ppc64le the -mno-sse2 probe fails, nothing is disabled, and
+    # gcc's power8 default enables AltiVec/VSX, so Eigen silently vectorises with
+    # code that is wrong on this platform (WHPG 7 ppc64le: sparse_linear_systems
+    # SIGSEGV inside Eigen's SimplicialLLT, PTT-1752).  Turn it off exactly as
+    # -mno-sse2 does on x86, so Eigen runs the same scalar path on every arch.
+    CHECK_CXX_COMPILER_FLAG("-mno-altivec -mno-vsx" ALTIVEC_DISABLE_OPTIONS_AVAILABLE)
+    if (ALTIVEC_DISABLE_OPTIONS_AVAILABLE)
+        set(SSE_DISABLE_OPTIONS "${SSE_DISABLE_OPTIONS} -mno-altivec -mno-vsx")
+    endif()
 
     set(CMAKE_CXX_FLAGS "-fdiagnostics-show-option -Wall -Wextra -pedantic -Wconversion -Wno-long-long -Wno-clobbered ${SSE_DISABLE_OPTIONS} -fstrict-aliasing"
     )
