@@ -320,6 +320,10 @@ sparse_direct_linear_system_final::run(AnyType &args) {
         A.insert(static_cast<uint32_t>(state.r(i)),
                  static_cast<uint32_t>(state.c(i))) = state.v(i);
     }
+    // insert() leaves the matrix in uncompressed mode (per-column slack
+    // tracked by innerNonZeros); hand the solver the compressed form Eigen
+    // documents as the expected input.
+    A.makeCompressed();
     
     // Switch case needs scoping in C++ if you want to declare inside it
     // Unfortunately, this means that I have to write the code to call the 
