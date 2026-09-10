@@ -115,8 +115,15 @@ typedef SparseDataStruct *SparseData;
  * @param ptr Pointer to the start of the count entry of a SparseData
  * @return The size of the integer count in an RLE index pointed to by ptr
  */
+/*
+ * The first byte of an RLE count entry is sign-encoded (see int8_to_compword):
+ * a negative value is the (negated) count itself, a positive value is the
+ * number of count-word bytes that follow.  Plain char is unsigned on
+ * PowerPC and AArch64, so it must be read as signed char explicitly or the
+ * "< 0" test can never fire and every run length decodes as garbage.
+ */
 #define	int8compstoragesize(ptr) \
- (((ptr) == NULL) ? 0 : (((*((char *)(ptr)) < 0) ? 1 : (1 + *((char *)(ptr))))))
+ (((ptr) == NULL) ? 0 : (((*((const signed char *)(ptr)) < 0) ? 1 : (1 + *((const signed char *)(ptr))))))
 /* The size of a compressed int8 is stored in the first element of the ptr
  * array; see the explanation at the int8_to_compword() function below.
  *

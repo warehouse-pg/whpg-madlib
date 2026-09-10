@@ -116,7 +116,7 @@ void int8_to_compword(int64 num, char entry[9])
 	if (num < 128) {
 		/* The reason this is negative is because entry[0] is
 	           used to record sizes in the other cases. */
-		entry[0] = -(char)num;
+		entry[0] = (char) -num;	/* same bit pattern whether char is signed or not */
 		return;
 	}
 
@@ -143,7 +143,7 @@ void int8_to_compword(int64 num, char entry[9])
  */
 int64 compword_to_int8(const char *entry)
 {
-	char size = int8compstoragesize(entry);
+	int size = int8compstoragesize(entry);
 	int16_t num_2;
 	char *numptr2 = (char *)(&num_2);
 	int32_t num_4;
@@ -157,7 +157,7 @@ int64 compword_to_int8(const char *entry)
 			 */
 			return 1;
 		case 1:
-			num = -(entry[0]);
+			num = -((signed char) entry[0]);
 			break;
 		case 3:
 			numptr2[0] = entry[1];
