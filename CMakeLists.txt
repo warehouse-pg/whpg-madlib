@@ -18,6 +18,7 @@ project(MADlib)
 cmake_minimum_required(VERSION 2.8.4 FATAL_ERROR)
 
 include(ExternalProject)
+include(CheckCCompilerFlag)
 include(CheckCXXCompilerFlag)
 
 # -- Local definitions (filenames, paths, etc.) --------------------------------
@@ -202,6 +203,21 @@ elseif(CMAKE_C_COMPILER_ID MATCHES "Clang")
             "Flags used by the compiler during all build types." FORCE)
     endif(CXX11)
 endif(CMAKE_COMPILER_IS_GNUCXX)
+
+# MADlib was written on x86, where plain char is signed; PowerPC and AArch64
+# make it unsigned.  The svec RLE decoder was one such assumption (fixed at the
+# source) and the rest of the tree has never been audited for it, so build with
+# signed char everywhere.  A no-op on x86.  This sits outside the compiler-id
+# blocks above because it is not a GCC extension -- Clang takes it too, and the
+# platforms with unsigned char are exactly the ones that get built with Clang.
+CHECK_C_COMPILER_FLAG(-fsigned-char C_SIGNED_CHAR_OPTION_AVAILABLE)
+if(C_SIGNED_CHAR_OPTION_AVAILABLE)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fsigned-char")
+endif(C_SIGNED_CHAR_OPTION_AVAILABLE)
+CHECK_CXX_COMPILER_FLAG(-fsigned-char CXX_SIGNED_CHAR_OPTION_AVAILABLE)
+if(CXX_SIGNED_CHAR_OPTION_AVAILABLE)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fsigned-char")
+endif(CXX_SIGNED_CHAR_OPTION_AVAILABLE)
 
 if(CXX11)
     add_definitions("-D_GLIBCXX_USE_CXX11_ABI=1")
