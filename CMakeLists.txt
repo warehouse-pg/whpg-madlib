@@ -155,18 +155,6 @@ if(CMAKE_COMPILER_IS_GNUCXX)
     if (SSE_DISABLE_OPTIONS_AVAILABLE)
         set(SSE_DISABLE_OPTIONS "-mno-sse2")
     endif()
-    # PowerPC counterpart.  The bundled Eigen (branches/3.2) selects its AltiVec
-    # backend whenever the compiler defines __ALTIVEC__, and that backend only
-    # knows big-endian lane order: little-endian support did not land until
-    # Eigen 3.3.  On ppc64le the -mno-sse2 probe fails, nothing is disabled, and
-    # gcc's power8 default enables AltiVec/VSX, so Eigen silently vectorises with
-    # code that is wrong on this platform (WHPG 7 ppc64le: sparse_linear_systems
-    # SIGSEGV inside Eigen's SimplicialLLT, PTT-1752).  Turn it off exactly as
-    # -mno-sse2 does on x86, so Eigen runs the same scalar path on every arch.
-    CHECK_CXX_COMPILER_FLAG("-mno-altivec -mno-vsx" ALTIVEC_DISABLE_OPTIONS_AVAILABLE)
-    if (ALTIVEC_DISABLE_OPTIONS_AVAILABLE)
-        set(SSE_DISABLE_OPTIONS "${SSE_DISABLE_OPTIONS} -mno-altivec -mno-vsx")
-    endif()
 
     set(CMAKE_CXX_FLAGS "-fdiagnostics-show-option -Wall -Wextra -pedantic -Wconversion -Wno-long-long -Wno-clobbered ${SSE_DISABLE_OPTIONS} -fstrict-aliasing"
     )
@@ -238,6 +226,16 @@ else(CXX11)
     add_definitions("-D_GLIBCXX_USE_CXX11_ABI=0")
     # TODO: for recent cmake, add_compile_definitions("_GLIBCXX_USE_CXX11_ABI=0")
 endif(CXX11)
+
+# Keep the bundled Eigen (branches/3.2) on its scalar code path on every
+# architecture.  On x86 -mno-sse2 above already achieves this; on ppc64le Eigen
+# 3.2 picks its AltiVec backend whenever __ALTIVEC__ is defined (gcc's power8
+# default) and that backend only knows big-endian lane order, so it produces
+# wrong results / SIGSEGV in sparse_linear_systems (PTT-1752).  Disabling the
+# ISA with -mno-altivec/-mno-vsx is not an option: on el9 gcc 11 it silently
+# drops the default IEEE128 long double ABI and libstdc++'s numeric_traits.h
+# then fails on the VSX-only __ieee128 builtin.  Eigen's own switch avoids both.
+add_definitions(-DEIGEN_DONT_VECTORIZE)
 
 # force a `m4_' prefix to all builtins
 if(FREEBSD)
