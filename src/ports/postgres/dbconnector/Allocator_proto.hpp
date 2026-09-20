@@ -96,6 +96,7 @@ protected:
 
     void *makeAligned(void *inPtr) const;
     void *unaligned(void *inPtr) const;
+    bool isAlignedBlock(void *inPtr) const;
 
     template <dbal::MemoryContext MC, dbal::ZeroMemory ZM,
         dbal::OnMemoryAllocationFailure F, Allocator::ReallocateMemory R>

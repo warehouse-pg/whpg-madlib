@@ -7,6 +7,8 @@
 #ifndef MADLIB_POSTGRES_ALLOCATOR_IMPL_HPP
 #define MADLIB_POSTGRES_ALLOCATOR_IMPL_HPP
 
+#include <cstdlib>
+
 namespace madlib {
 
 namespace dbconnector {
@@ -180,6 +182,16 @@ Allocator::free(void *inPtr) const {
     if (inPtr == NULL)
         return;
 
+    if (!isAlignedBlock(inPtr)) {
+        /*
+         * Not one of our blocks: it belongs to the standard allocator (see
+         * isAlignedBlock()). Release it the way its owner would; handing it
+         * to pfree() would dereference a non-pointer and crash the backend.
+         */
+        std::free(inPtr);
+        return;
+    }
+
     /*
      * See allocate(const size_t, const std::nothrow_t&) why we disable
      * processing of interrupts.
@@ -302,6 +314,48 @@ Allocator::unaligned(void *inPtr) const {
     return inPtr;
 #else
     return (*(reinterpret_cast<void**>(inPtr) - 1));
+#endif
+}
+
+/**
+ * @internal
+ * @brief Test whether \c inPtr points to a block handed out by makeAligned()
+ *
+ * Our global <tt>operator delete()</tt> is reached by blocks we did not
+ * allocate. The overrides in NewDelete.cpp are local symbols in
+ * <tt>libmadlib.so</tt> (they are not exported, so they do not replace the
+ * global allocation functions process-wide), which means a block can be
+ * allocated by the standard <tt>operator new()</tt> inside
+ * <tt>libstdc++.so</tt> and still be released through ours. With
+ * <tt>_GLIBCXX_USE_CXX11_ABI=1</tt> that is the normal case for
+ * \c std::string: the allocating \c _M_create() is an out-of-line symbol
+ * resolved into libstdc++, while the releasing \c _M_dispose() is inlined
+ * into libmadlib.
+ *
+ * For such a block the word in front of \c inPtr is not the pointer
+ * makeAligned() stored but whatever the owning allocator keeps there -
+ * usually a small integer - so unaligned() would return a non-pointer and
+ * pfree() would dereference it and take the backend down with SIGSEGV.
+ *
+ * makeAligned() rounds the raw pointer up to the next 16-byte boundary, so
+ * the pointer it stores always sits between 1 and 16 bytes below the value it
+ * returned. Checking that relation identifies our own blocks without any
+ * extra per-allocation storage.
+ */
+inline
+bool
+Allocator::isAlignedBlock(void *inPtr) const {
+#if MAXIMUM_ALIGNOF >= 16
+    // makeAligned() is a no-op here, so there is no cookie to check and no
+    // way to tell a foreign block apart.
+    (void) inPtr;
+    return true;
+#else
+    const char *aligned = static_cast<const char*>(inPtr);
+    const char *raw = static_cast<const char*>(
+        *(reinterpret_cast<void**>(inPtr) - 1));
+
+    return raw < aligned && aligned - raw <= 16;
 #endif
 }
 
