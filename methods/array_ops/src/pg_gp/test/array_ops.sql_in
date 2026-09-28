@@ -71,6 +71,9 @@ SELECT assert(
 
 SELECT array_filter(ARRAY[0.8, 9.5, 0, 2.6]::float8[]);
 SELECT array_filter(ARRAY[0.8, 9.5, 0, 2.6]::float8[], 2.5::float8, '<');
+SELECT assert(
+    trap_error($$SELECT array_filter(ARRAY[0.8, 9.5]::float8[], 2.5::float8, repeat('<', 64))$$) = 1,
+    'array_filter: an operator longer than two characters should be rejected');
 
 ------------------------------------------------------------
 -- numeric[]

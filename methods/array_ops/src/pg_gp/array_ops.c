@@ -955,7 +955,13 @@ array_filter(PG_FUNCTION_ARGS) {
     if (PG_NARGS() > 2) {
         text *op_text = PG_GETARG_TEXT_P(2);
         int op_len = VARSIZE(op_text) - VARHDRSZ;
-        strncpy(op, VARDATA(op_text), VARSIZE(op_text) - VARHDRSZ);
+        if (op_len >= (int) sizeof(op)) {
+            ereport(ERROR, (errcode(ERRCODE_INVALID_PARAMETER_VALUE),
+                            errmsg("operator is not supported"),
+                            errdetail("Filtering operator %s is not supported.",
+                                      text_to_cstring(op_text))));
+        }
+        memcpy(op, VARDATA(op_text), op_len);
         op[op_len] = 0;
     }
 
