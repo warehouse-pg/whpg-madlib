@@ -35,52 +35,64 @@
 
 import sys
 import os
+import shutil
+import subprocess
+import tempfile
 
 database = sys.argv[1]
 old_vers = sys.argv[2]
 new_vers = sys.argv[3]
 ch_filename = sys.argv[4]
 
+
+def run(args, out_path=None):
+    """Run a command without a shell, sending stdout to out_path or discarding it."""
+    if out_path is None:
+        return subprocess.call(args, stdout=subprocess.DEVNULL)
+    with open(out_path, 'w') as out:
+        return subprocess.call(args, stdout=out)
+
+
+def psql(*args, out_path=None):
+    return run(['psql', '-d', database] + list(args), out_path)
+
+
 if os.path.exists(ch_filename):
     print("{0} already exists".format(ch_filename))
     raise SystemExit
 
-err1 = os.system("""psql {0} -l > /dev/null""".format(database))
+err1 = psql('-l')
 if err1 != 0:
     print("Database {0} does not exist".format(database))
     raise SystemExit
 
-err1 = os.system("""psql {0} -c "select madlib_old_vers.version()" > /dev/null
-                 """.format(database))
+err1 = psql('-c', 'select madlib_old_vers.version()')
 if err1 != 0:
     print("MADlib is not installed in the madlib_old_vers schema. Please refer to the Prequisites.")
     raise SystemExit
 
-err1 = os.system("""psql {0} -c "select madlib.version()" > /dev/null
-                 """.format(database))
+err1 = psql('-c', 'select madlib.version()')
 if err1 != 0:
     print("MADlib is not installed in the madlib schema. Please refer to the Prequisites.")
     raise SystemExit
 
 print("Creating changelist {0}".format(ch_filename))
-os.system("""
-    rm -f /tmp/madlib_tmp_nm.txt \
-    /tmp/madlib_tmp_udf.txt \
-    /tmp/madlib_tmp_udt.txt \
-    /tmp/madlib_tmp_udo.txt \
-    /tmp/madlib_tmp_udoc.txt \
-    /tmp/madlib_tmp_typedep.txt \
-    /tmp/madlib_tmp_typedep_udo.txt \
-    /tmp/madlib_tmp_typedep_udoc.txt
-    """)
+tmp_dir = tempfile.mkdtemp(prefix='madlib_changelist_')
+
+
+def tmp(name):
+    return os.path.join(tmp_dir, name)
+
+
 try:
     # Find the new modules using the git diff
-    err1 = os.system("git diff {old_vers} {new_vers} --name-only --diff-filter=A > /tmp/madlib_tmp_nm.txt".format(**locals()))
+    err1 = run(['git', 'diff', old_vers, new_vers, '--name-only', '--diff-filter=A'],
+               tmp('nm.txt'))
     if err1 != 0:
         print("Git diff failed. Please ensure that branches/tags are fetched.")
         raise SystemExit
 
-    f = open("/tmp/madlib_tmp_cl.yaml", "w")
+    f = open(tmp('cl.yaml'), "w")
     f.write(
 """# ------------------------------------------------------------------------------
 # Licensed to the Apache Software Foundation (ASF) under one
@@ -118,18 +130,18 @@ try:
 
     # Find the new .sql_in files that are not in test folders
     f.write("new module:\n")
-    with open('/tmp/madlib_tmp_nm.txt') as fp:
+    with open(tmp('nm.txt')) as fp:
         for line in fp:
             if 'sql_in' in line and '/test/' not in line:
                  f.write('    ' + line.split('/')[5].split('.')[0]+':\n')
 
     # Find the changed types and keep a list for future use
-    os.system("psql {0} -f diff_udt.sql > /tmp/madlib_tmp_udt.txt".format(database))
+    psql('-f', 'diff_udt.sql', out_path=tmp('udt.txt'))
 
     f.write("\n# Changes in the types (UDT) including removal and modification\n")
     f.write("udt:\n")
     udt_list=[]
-    with open('/tmp/madlib_tmp_udt.txt') as fp:
+    with open(tmp('udt.txt')) as fp:
         for line in fp:
 
             # Both the type and its array form shows up as separate types
@@ -152,11 +164,11 @@ try:
     current_list = udf_list
 
     # Find the changed functions/aggregates via the diff_udf script and write them to a file
-    os.system("psql {0} -f diff_udf.sql > /tmp/madlib_tmp_udf.txt".format(database))
+    psql('-f', 'diff_udf.sql', out_path=tmp('udf.txt'))
 
     # The entries in the file are ordered by type.
     # Read them line by line and add to the udf list until the first aggregate
-    with open('/tmp/madlib_tmp_udf.txt') as fp:
+    with open(tmp('udf.txt')) as fp:
         for line in fp:
             if 'type' in line:
                 # When we get the first aggregate, we switch the current list
@@ -170,22 +182,20 @@ try:
     # Find the function that return a changed type
     # Note that we already ran the diff_udf.sql file
     # This means the get_functions() function is already defined in the database
-    if os.path.exists("/tmp/madlib_tmp_typedep.txt"):
-        os.system("rm /tmp/madlib_tmp_typedep.txt")
-    os.system("touch /tmp/madlib_tmp_typedep.txt")
     for t in udt_list:
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
         # Find all of the old functions that return this particular type t and write to a table
-        os.system("""psql {database} -c "SELECT get_functions('__tmp__madlib__', 'madlib_old_vers', 'madlib_old_vers.{t}')" > /dev/null """.format(**locals()))
+        psql('-c', "SELECT get_functions('__tmp__madlib__', 'madlib_old_vers', 'madlib_old_vers.{t}')".format(**locals()))
 
         # Order them in descending order on type so that we read the functions first and aggregates last
-        os.system("""psql {database} -x -c "SELECT type, name, retype, argtypes FROM __tmp__madlib__ ORDER BY type DESC" > /tmp/madlib_tmp_typedep.txt """.format(**locals()))
+        psql('-x', '-c', 'SELECT type, name, retype, argtypes FROM __tmp__madlib__ ORDER BY type DESC',
+             out_path=tmp('typedep.txt'))
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
-        with open('/tmp/madlib_tmp_typedep.txt') as fp:
+        with open(tmp('typedep.txt')) as fp:
             for line in fp:
                 if '|' in line:
                     sp = line.split('|')
@@ -239,8 +249,8 @@ try:
     f.write("\n# Changes in the operators (UDO)\n")
     f.write("udo:\n")
 
-    os.system("psql {0} -f diff_udo.sql > /tmp/madlib_tmp_udo.txt".format(database))
-    with open('/tmp/madlib_tmp_udo.txt') as fp:
+    psql('-f', 'diff_udo.sql', out_path=tmp('udo.txt'))
+    with open(tmp('udo.txt')) as fp:
         for line in fp:
             if ' | ' in line:
                     sp = line.split(' | ')
@@ -256,15 +266,16 @@ try:
 
     for t in udt_list:
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
-        os.system("""psql {database} -c "SELECT get_udos('__tmp__madlib__', 'madlib_old_vers', '{t}')" > /dev/null """.format(**locals()))
+        psql('-c', "SELECT get_udos('__tmp__madlib__', 'madlib_old_vers', '{t}')".format(**locals()))
 
-        os.system("""psql {database} -x -c "SELECT name, rettype, oprright, oprleft FROM __tmp__madlib__ ORDER BY name DESC" > /tmp/madlib_tmp_typedep_udo.txt """.format(**locals()))
+        psql('-x', '-c', 'SELECT name, rettype, oprright, oprleft FROM __tmp__madlib__ ORDER BY name DESC',
+             out_path=tmp('typedep_udo.txt'))
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
-        with open('/tmp/madlib_tmp_typedep_udo.txt') as fp:
+        with open(tmp('typedep_udo.txt')) as fp:
             for line in fp:
                 if '|' in line:
                     sp = line.split('|')
@@ -282,9 +293,9 @@ try:
     # Find the changed operator classes
 
     f.write("\n# Changes in the operator classes (UDOC)\n")
-    os.system("psql {0} -f diff_udoc.sql > /tmp/madlib_tmp_udoc.txt".format(database))
+    psql('-f', 'diff_udoc.sql', out_path=tmp('udoc.txt'))
     f.write("udoc:\n")
-    with open('/tmp/madlib_tmp_udoc.txt') as fp:
+    with open(tmp('udoc.txt')) as fp:
         for line in fp:
             if '|' in line:
                     sp = line.split('|')
@@ -296,15 +307,16 @@ try:
 
     for t in udt_list:
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
-        os.system("""psql {database} -c "SELECT get_udocs('__tmp__madlib__', 'madlib_old_vers', '{t}')" > /dev/null """.format(**locals()))
+        psql('-c', "SELECT get_udocs('__tmp__madlib__', 'madlib_old_vers', '{t}')".format(**locals()))
 
-        os.system("""psql {database} -x -c "SELECT opfamily_name, index_method FROM __tmp__madlib__ ORDER BY opfamily_name DESC" > /tmp/madlib_tmp_typedep_udoc.txt """.format(**locals()))
+        psql('-x', '-c', 'SELECT opfamily_name, index_method FROM __tmp__madlib__ ORDER BY opfamily_name DESC',
+             out_path=tmp('typedep_udoc.txt'))
 
-        os.system("""psql {database} -c "DROP TABLE IF EXISTS __tmp__madlib__ " > /dev/null """.format(**locals()))
+        psql('-c', 'DROP TABLE IF EXISTS __tmp__madlib__ ')
 
-        with open('/tmp/madlib_tmp_typedep_udoc.txt') as fp:
+        with open(tmp('typedep_udoc.txt')) as fp:
             for line in fp:
                 if '|' in line:
                     sp = line.split('|')
@@ -319,20 +331,10 @@ try:
     # Copy the new changelist file to its proper location
     # This helps to keep the madlib folder clean in case the program stops
     # unexpectedly
-    os.system("cp /tmp/madlib_tmp_cl.yaml {0}".format(ch_filename))
+    shutil.copyfile(tmp('cl.yaml'), ch_filename)
 
 except:
     print("Something went wrong! The changelist might be wrong/corrupted.")
     raise
 finally:
-    os.system("""
-        rm -f /tmp/madlib_tmp_nm.txt \
-        /tmp/madlib_tmp_udf.txt \
-        /tmp/madlib_tmp_udt.txt \
-        /tmp/madlib_tmp_udo.txt \
-        /tmp/madlib_tmp_udoc.txt \
-        /tmp/madlib_tmp_typedep.txt \
-        /tmp/madlib_tmp_typedep_udo.txt \
-        /tmp/madlib_tmp_typedep_udoc.txt \
-        /tmp/madlib_tmp_cl.yaml
-        """)
+    shutil.rmtree(tmp_dir, ignore_errors=True)
