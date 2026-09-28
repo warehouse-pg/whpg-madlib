@@ -141,7 +141,7 @@ class FitMultipleModel(object):
         self.next_schedule_tbl = unique_string('next_schedule')
         self.cached_source_table = unique_string('cached_source_table')
         self.metrics_elapsed_time_offset = metrics_elapsed_time_offset
-        self.rotate_schedule_tbl_plan = self.add_object_maps_plan = None
+        self.rotate_schedule_tbl_plan = self.add_object_table_plan = None
         self.hop_plan = self.udf_plan = None
 
         input_tbl_valid(self.source_table, self.module_name)
@@ -171,10 +171,10 @@ class FitMultipleModel(object):
         self.object_table = self.fit_validator_train.object_table
 
         self.metrics_iters = []
-        self.object_map_col = 'object_map'
+        self.object_table_col = 'object_table'
         self.custom_mst_keys = None
         if self.object_table is not None:
-            self.populate_object_map()
+            self.find_custom_function_msts()
 
         self.original_cuda_env = None
         if CUDA_VISIBLE_DEVICES_KEY in os.environ:
@@ -339,7 +339,7 @@ class FitMultipleModel(object):
                 seg_ids,
                 images_per_seg,
                 [], [], True,
-                mst[self.object_map_col],
+                mst[self.object_table_col],
                 self.model_output_tbl,
                 mst[self.mst_key_col])
             total_eval_compute_time += eval_compute_time
@@ -353,16 +353,15 @@ class FitMultipleModel(object):
                          "{1}: {2}".format(label, iter, total_eval_compute_time)
         DEBUG.print_timing('eval_model_total')
 
-    def populate_object_map(self):
+    def find_custom_function_msts(self):
         builtin_losses = update_builtin_losses(dir(losses))
         builtin_metrics = update_builtin_metrics(dir(metrics))
 
         # Track distinct custom functions in compile_params
         custom_fn_names = set()
-        # Track their corresponding mst_keys to pass along the custom function
-        # definition read from the object table.
-        # For compile_params calling builtin functions the object_map is set to
-        # None.
+        # Track their corresponding mst_keys: only these msts get the object
+        # table name, which segments read when they compile the model.
+        # For compile_params calling builtin functions it is left as None.
         custom_msts = []
         for mst in self.msts:
             compile_params = mst[self.compile_params_col]
@@ -381,10 +380,11 @@ class FitMultipleModel(object):
                 custom_fn_names.add(local_metric)
                 custom_msts.append(mst)
 
-        self.custom_fn_object_map = query_custom_functions_map(self.object_table, custom_fn_names)
+        # Fail early if a compile_param names a function the table lacks.
+        load_custom_functions(self.object_table, custom_fn_names)
 
         for mst in custom_msts:
-            mst[self.object_map_col] = self.custom_fn_object_map
+            mst[self.object_table_col] = self.object_table
 
         self.custom_mst_keys = { mst['mst_key'] for mst in custom_msts }
 
@@ -451,7 +451,7 @@ class FitMultipleModel(object):
                     o.{self.model_arch_col},
                     m.{self.compile_params_col},
                     m.{self.fit_params_col},
-                    NULL AS {self.object_map_col}, -- Fill in later
+                    NULL AS {self.object_table_col}, -- Fill in later
                     s.{self.dist_key_col}
                 FROM {self.schedule_tbl} s
                     JOIN {self.model_selection_table} m
@@ -476,7 +476,7 @@ class FitMultipleModel(object):
                     a.{self.model_arch_col},
                     m.{self.compile_params_col},
                     m.{self.fit_params_col},
-                    NULL AS {self.object_map_col}, -- Fill in later
+                    NULL AS {self.object_table_col}, -- Fill in later
                     s.{self.dist_key_col}
                 FROM {self.schedule_tbl} s
                     JOIN {self.model_selection_table} m
@@ -497,7 +497,7 @@ class FitMultipleModel(object):
                                      {self.model_arch_col} JSON,
                                      {self.compile_params_col} TEXT,
                                      {self.fit_params_col} TEXT,
-                                     {self.object_map_col} BYTEA,
+                                     {self.object_table_col} TEXT,
                                      {self.dist_key_col} INTEGER,
                                      PRIMARY KEY ({self.dist_key_col})
                                     )
@@ -562,7 +562,7 @@ class FitMultipleModel(object):
                     {self.model_arch_col},
                     {self.compile_params_col},
                     {self.fit_params_col},
-                    {self.object_map_col},
+                    {self.object_table_col},
                     {self.dist_key_col}
                 ) VALUES (
                     $MADLIB${{{self.mst_key_col}}}$MADLIB$,
@@ -570,7 +570,7 @@ class FitMultipleModel(object):
                     $2,
                     $MADLIB${{{self.compile_params_col}}}$MADLIB$,
                     $MADLIB${{{self.fit_params_col}}}$MADLIB$,
-                    NULL, -- Fill in custom object_map soon
+                    NULL, -- Fill in custom object_table soon
                     $3
                 )
             """.format(self=self).format(**mst)
@@ -589,14 +589,14 @@ class FitMultipleModel(object):
                 ','.join( map(str, self.custom_mst_keys) )
             )
 
-            # Add object_map to any msts which use custom functions
-            if self.add_object_maps_plan is None:
-                self.add_object_maps_plan = plpy.prepare("""
+            # Add the object table name to any msts which use custom functions
+            if self.add_object_table_plan is None:
+                self.add_object_table_plan = plpy.prepare("""
                     UPDATE {self.model_output_tbl}
-                        SET {self.object_map_col} = $1
+                        SET {self.object_table_col} = $1
                             WHERE {self.mst_key_col} IN {custom_keys}
-                """.format(**locals()), ["BYTEA"])
-            plpy.execute(self.add_object_maps_plan, [self.custom_fn_object_map])
+                """.format(**locals()), ["TEXT"])
+            plpy.execute(self.add_object_table_plan, [self.object_table])
 
     def init_model_info_tbl(self):
         info_table_create_query = """
@@ -837,7 +837,7 @@ class FitMultipleModel(object):
                                o.{self.model_arch_col},
                                o.{self.compile_params_col},
                                o.{self.fit_params_col},
-                               o.{self.object_map_col},
+                               o.{self.object_table_col},
                                s.{self.dist_key_col}
                         FROM {self.model_output_tbl} o JOIN {self.schedule_tbl} s
                             ON o.{self.dist_key_col} = s.{self.prev_dist_key_col}
@@ -928,13 +928,13 @@ class FitMultipleModel(object):
                             model_in.{self.model_weights_col}::BYTEA,
                             $1::BOOLEAN, -- is_final_training_call
                             {self.use_caching}::BOOLEAN,
-                            model_in.{self.object_map_col}::BYTEA
+                            model_in.{self.object_table_col}::TEXT
                         )
                     END::BYTEA AS {self.model_weights_col},
                     model_in.{self.model_arch_col},
                     model_in.{self.compile_params_col},
                     model_in.{self.fit_params_col},
-                    model_in.{self.object_map_col},
+                    model_in.{self.object_table_col},
                     model_in.{self.dist_key_col}
                 FROM {self.model_input_tbl} model_in
                     LEFT JOIN {source_table} src

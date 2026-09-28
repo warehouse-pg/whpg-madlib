@@ -53,6 +53,13 @@ SELECT assert(UPPER(atttypid::regtype::TEXT) = 'TEXT',
 SELECT assert(id = 1, 'Wrong id written by load_custom_function')
     FROM __test_custom_function_table__;
 
+/* Segments read the object table while training, so it must be replicated */
+m4_ifdef(`__POSTGRESQL__', `', `
+SELECT assert(policytype = $$r$$, $$object table should be replicated$$)
+    FROM gp_distribution_policy
+    WHERE localoid = $$__test_custom_function_table__$$::regclass;
+')
+
 /* Validate function object created */
 SELECT assert(read_custom_function(object, 2, 3) = 5, 'Custom function should return sum of args.')
     FROM __test_custom_function_table__;
