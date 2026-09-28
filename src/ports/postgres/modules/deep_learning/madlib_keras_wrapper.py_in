@@ -18,13 +18,12 @@
 # under the License.
 
 import ast
-import dill
 import os
 import plpy
 from collections import defaultdict
 from math import ceil
 
-from deep_learning.madlib_keras_custom_function import CustomFunctionSchema
+from deep_learning.madlib_keras_custom_function import load_custom_functions
 from deep_learning.madlib_keras_custom_function import update_builtin_metrics
 from deep_learning.madlib_keras_custom_function import update_builtin_losses
 from deep_learning.madlib_keras_serializer import deserialize_as_nd_weights
@@ -394,12 +393,14 @@ def get_optimizers():
     return optimizers
 
 
-# Run the keras.compile with the given parameters
-def compile_model(model, compile_params, custom_function_map=None):
+# Run the keras.compile with the given parameters. Custom loss and metric
+# functions named in compile_params are read from object_table.
+def compile_model(model, compile_params, object_table=None):
     optimizers = get_optimizers()
     (opt_name,final_args,compile_dict) = parse_and_validate_compile_params(compile_params)
-    if custom_function_map is not None:
-        local_map=dill.loads(custom_function_map)
+    if object_table is not None:
+        local_map = load_custom_functions(object_table,
+                                          get_custom_functions_list(compile_params))
 
         compile_dict['loss']=local_map[compile_dict['loss']] \
             if compile_dict['loss'] in local_map else compile_dict['loss']
@@ -434,51 +435,6 @@ def validate_compile_param_types(compile_dict):
             compile_dict['sample_weight_mode'] is None or
             compile_dict['sample_weight_mode'] == "temporal",
             """compile parameter sample_weight_mode can only be "temporal" or None""")
-
-
-# Returns an object of custom function name and it corresponding object
-def query_custom_functions_map(object_table, custom_fn_names):
-    """
-    Args:
-        @param: object_table    Name of the object table
-        @param: custom_fn_names List of custom function read from compile_param
-                                if custom function exist in compile_params,
-                                    expected list length >= 1
-                                else,
-                                    an empty list is passed in
-    Returns:
-        custom_fn_map_obj:      A dill object of a dictionary mapping custom function
-                                name to its definition object as read from the object
-                                table
-                                Example:
-                                {custom_fn1 : function_def_obj1, custom_fn2 : function_def_obj2}
-
-    """
-    # Dictionary map of name:object
-    # {custom_fn1 : function_def_obj1, custom_fn2 : function_def_obj2}
-    custom_fn_map = dict()
-
-    if len(custom_fn_names) < 1:
-        return custom_fn_map
-
-    fn_set = set(custom_fn_names)
-    unique_fn_list = list(fn_set)
-
-    custom_obj_col_name = CustomFunctionSchema.FN_OBJ
-    # Query the custom function if not yet loaded from table
-    res = plpy.execute("""
-                        SELECT {custom_fn_col_name}, {custom_obj_col_name} FROM {object_table}
-                        WHERE {custom_fn_col_name} = ANY(ARRAY{unique_fn_list})
-                       """.format(custom_obj_col_name=custom_obj_col_name,
-                                  object_table=object_table,
-                                  custom_fn_col_name=CustomFunctionSchema.FN_NAME,
-                                  unique_fn_list=unique_fn_list))
-    if res.nrows() < len(unique_fn_list):
-        plpy.error("Custom function {0} not defined in object table '{1}'".format(unique_fn_list, object_table))
-    for r in res:
-        custom_fn_map[r[CustomFunctionSchema.FN_NAME]] = dill.loads(r[custom_obj_col_name])
-    custom_fn_map_obj = dill.dumps(custom_fn_map)
-    return custom_fn_map_obj
 
 
 def get_custom_functions_list(compile_params):

@@ -68,22 +68,79 @@ def _validate_object(object, **kwargs):
         plpy.error("{0}: Invalid function object".format(module_name, e))
 
 
+def validate_object_table(object_table):
+    """Check that object_table may be used as a source of custom functions.
+
+    Deserializing a custom function runs the code stored in it, so a table
+    is accepted only when a superuser owns it. On WarehousePG it must also be
+    replicated, because segments read it while training and evaluating.
+    Returns the table's schema-qualified name as resolved by the catalog.
+    """
+    policy_col = "NULL" if is_platform_pg() else "d.policytype"
+    policy_join = "" if is_platform_pg() else \
+        "LEFT JOIN pg_catalog.gp_distribution_policy d ON d.localoid = c.oid"
+    plan = plpy.prepare("""
+        SELECT c.oid::pg_catalog.regclass::text AS qualified_name,
+               r.rolsuper AS owner_is_superuser,
+               {policy_col} AS policytype
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_roles r ON r.oid = c.relowner
+        {policy_join}
+        WHERE c.oid = $1::pg_catalog.regclass
+        """.format(**locals()), ["text"])
+    res = plpy.execute(plan, [object_table])
+    _assert(res.nrows() == 1,
+            "DL: Object table '{0}' does not exist.".format(object_table))
+    _assert(res[0]['owner_is_superuser'],
+            "DL: Cannot use a table of a non-superuser as object table.")
+    if not is_platform_pg():
+        _assert(res[0]['policytype'] == 'r',
+                "DL: Object table '{0}' must be replicated so that every "
+                "segment can read it. Run ALTER TABLE {0} SET DISTRIBUTED "
+                "REPLICATED.".format(res[0]['qualified_name']))
+    return res[0]['qualified_name']
+
+
+def load_custom_functions(object_table, custom_fn_names):
+    """Return {name: function} for the given names, read from object_table.
+
+    This is the only place where stored custom functions are deserialized;
+    validate_object_table() decides whether the table is trusted.
+    """
+    if not custom_fn_names:
+        return {}
+    qualified_name = validate_object_table(object_table)
+    unique_fn_names = list(set(custom_fn_names))
+    plan = plpy.prepare("""
+        SELECT {fn_name}, {fn_obj} FROM {qualified_name}
+        WHERE {fn_name} = ANY($1)
+        """.format(fn_name=CustomFunctionSchema.FN_NAME,
+                   fn_obj=CustomFunctionSchema.FN_OBJ,
+                   qualified_name=qualified_name), ["text[]"])
+    res = plpy.execute(plan, [unique_fn_names])
+    if res.nrows() < len(unique_fn_names):
+        plpy.error("Custom function {0} not defined in object table '{1}'".format(
+            unique_fn_names, object_table))
+    return dict((r[CustomFunctionSchema.FN_NAME], dill.loads(r[CustomFunctionSchema.FN_OBJ]))
+                for r in res)
+
+
 @MinWarning("error")
 def load_custom_function(schema_madlib, object_table, object, name, description=None, **kwargs):
 
     if object_table is not None:
         object_table = "{0}.{1}".format(schema_madlib, quote_ident(object_table))
+    _assert(is_superuser(current_user()), "DL: The user has to have admin "\
+        "privilages to load a custom function")
     _validate_object(object)
     _assert(name is not None,
             "{0}: function name cannot be NULL!".format(module_name))
-    _assert(is_superuser(current_user()), "DL: The user has to have admin "\
-        "privilages to load a custom function")
     try:
         if not table_exists(object_table):
             col_defs = get_col_name_type_sql_string(CustomFunctionSchema.col_names,
                                                     CustomFunctionSchema.col_types)
             with_query = "" if is_platform_pg() else """
-            with(appendonly=false)"""
+            with(appendonly=false) DISTRIBUTED REPLICATED"""
 
             sql = """CREATE TABLE {object_table}
                                   ({col_defs}, PRIMARY KEY({fn_name}))

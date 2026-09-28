@@ -1,0 +1,132 @@
+# coding=utf-8
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+
+m4_changequote(`<!', `!>')
+
+import sys
+from os import path
+# Add modules to the pythonpath.
+sys.path.append(path.dirname(path.dirname(path.dirname(path.dirname(path.abspath(__file__))))))
+sys.path.append(path.dirname(path.dirname(path.dirname(path.abspath(__file__)))))
+
+import dill
+import unittest
+from mock import *
+import plpy_mock as plpy
+
+
+def sum_fn(a, b):
+    return a + b
+
+
+class FakeResult(list):
+    def nrows(self):
+        return len(self)
+
+
+class ObjectTableTrustTestCase(unittest.TestCase):
+    def setUp(self):
+        patches = {
+            'plpy': plpy,
+            'utilities.mean_std_dev_calculator': Mock()
+        }
+        self.module_patcher = patch.dict('sys.modules', patches)
+        self.module_patcher.start()
+        plpy.prepare = MagicMock(return_value='plan')
+        plpy.execute = MagicMock()
+        import madlib_keras_custom_function
+        self.subject = madlib_keras_custom_function
+        self.subject.is_platform_pg = Mock(return_value=True)
+
+    def tearDown(self):
+        self.module_patcher.stop()
+
+    def catalog_row(self, owner_is_superuser=True, policytype=None):
+        return FakeResult([{'qualified_name': 'madlib.custom_fn_table',
+                            'owner_is_superuser': owner_is_superuser,
+                            'policytype': policytype}])
+
+    def test_validate_object_table_accepts_superuser_owned_table(self):
+        plpy.execute.return_value = self.catalog_row()
+        self.assertEqual('madlib.custom_fn_table',
+                         self.subject.validate_object_table('madlib.custom_fn_table'))
+        args, _ = plpy.execute.call_args
+        self.assertEqual(['madlib.custom_fn_table'], args[1])
+
+    def test_validate_object_table_rejects_non_superuser_owner(self):
+        plpy.execute.return_value = self.catalog_row(owner_is_superuser=False)
+        with self.assertRaises(plpy.PLPYException) as error:
+            self.subject.validate_object_table('madlib.custom_fn_table')
+        self.assertIn('non-superuser', str(error.exception))
+
+    def test_validate_object_table_rejects_missing_table(self):
+        plpy.execute.return_value = FakeResult([])
+        with self.assertRaises(plpy.PLPYException):
+            self.subject.validate_object_table('madlib.custom_fn_table')
+
+    def test_validate_object_table_requires_replicated_table_on_warehousepg(self):
+        self.subject.is_platform_pg = Mock(return_value=False)
+        plpy.execute.return_value = self.catalog_row(policytype='p')
+        with self.assertRaises(plpy.PLPYException) as error:
+            self.subject.validate_object_table('madlib.custom_fn_table')
+        self.assertIn('DISTRIBUTED REPLICATED', str(error.exception))
+
+        plpy.execute.return_value = self.catalog_row(policytype='r')
+        self.subject.validate_object_table('madlib.custom_fn_table')
+
+    def test_load_custom_functions_without_names_reads_nothing(self):
+        self.assertEqual({}, self.subject.load_custom_functions('madlib.custom_fn_table', []))
+        plpy.execute.assert_not_called()
+
+    def test_load_custom_functions_checks_table_before_reading(self):
+        plpy.execute.return_value = self.catalog_row(owner_is_superuser=False)
+        with self.assertRaises(plpy.PLPYException):
+            self.subject.load_custom_functions('madlib.custom_fn_table', ['sum_fn'])
+        self.assertEqual(1, plpy.execute.call_count)
+
+    def test_load_custom_functions_errors_on_missing_function(self):
+        plpy.execute.side_effect = [self.catalog_row(), FakeResult([])]
+        with self.assertRaises(plpy.PLPYException) as error:
+            self.subject.load_custom_functions('madlib.custom_fn_table', ['sum_fn'])
+        self.assertIn('not defined in object table', str(error.exception))
+
+    def test_load_custom_functions_returns_functions_by_name(self):
+        plpy.execute.side_effect = [
+            self.catalog_row(),
+            FakeResult([{'name': 'sum_fn', 'object': dill.dumps(sum_fn)}])]
+        fn_map = self.subject.load_custom_functions('madlib.custom_fn_table',
+                                                    ['sum_fn', 'sum_fn'])
+        self.assertEqual(['sum_fn'], list(fn_map.keys()))
+        self.assertEqual(3, fn_map['sum_fn'](1, 2))
+        args, _ = plpy.execute.call_args
+        self.assertEqual([['sum_fn']], args[1])
+
+    def test_load_custom_function_checks_superuser_before_deserializing(self):
+        self.subject.is_superuser = Mock(return_value=False)
+        self.subject.current_user = Mock(return_value='someone')
+        self.subject._validate_object = Mock()
+        with self.assertRaises(plpy.PLPYException):
+            self.subject.load_custom_function('madlib', 'custom_fn_table',
+                                              b'not a function', 'sum_fn')
+        self.subject._validate_object.assert_not_called()
+
+
+if __name__ == '__main__':
+    unittest.main()
+# ---------------------------------------------------------------------

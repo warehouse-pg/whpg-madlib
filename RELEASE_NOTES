@@ -10,6 +10,29 @@ commit history located at https://github.com/apache/madlib/commits/master.
 Current list of bugs and issues can be found at https://issues.apache.org/jira/browse/MADLIB.
 
 —-------------------------------------------------------------------------
+MADlib v2.2.0:
+
+Release Date: TBD
+
+Security fixes:
+    - XGBoost: Store models, label encoders and training data in data-only
+    formats (XGBoost native JSON, JSON) instead of pickle. Models trained by
+    MADlib 2.1.0 or earlier must be retrained before xgboost_predict() can
+    use them.
+    - DL: Read custom functions only from a superuser-owned object table,
+    verified on every code path including madlib_keras_evaluate() and the
+    internal transition functions, which now take the object table name
+    instead of serialized function objects. load_custom_function() checks
+    for superuser before deserializing. On WarehousePG, object tables are
+    created replicated; tables created by earlier versions must be converted
+    with ALTER TABLE ... SET DISTRIBUTED REPLICATED.
+    - Array_ops: Reject array_filter() operators longer than two characters
+    instead of overflowing a stack buffer.
+    - Madpack: Load YAML configuration with a safe loader; run
+    create_changelist.py commands without a shell and with private temporary
+    files.
+
+—-------------------------------------------------------------------------
 MADlib v2.1.0:
 
 Release Date: 2023-Aug-XX

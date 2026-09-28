@@ -125,11 +125,11 @@ CREATE OR REPLACE FUNCTION madlib_installcheck_deep_learning.fit_transition_mult
     serialized_weights          BYTEA,
     is_final_training_call      BOOLEAN,
     use_caching                 BOOLEAN,
-    custom_function_map         BYTEA
+    object_table                TEXT
 ) RETURNS BYTEA AS
 $$
     param_keys = [ 'compile_params', 'accessible_gpus_for_seg', 'dependent_var_shape', 'dist_key_mapping',
-                   'current_seg_id', 'segments_per_host', 'custom_function_map', 'is_final_training_call',
+                   'current_seg_id', 'segments_per_host', 'object_table', 'is_final_training_call',
                    'dist_key', 'serialized_weights', 'images_per_seg', 'model_architecture', 'fit_params',
                    'independent_var_shape', 'use_caching' ]
 
@@ -800,7 +800,7 @@ DROP FUNCTION madlib_installcheck_deep_learning.fit_transition_multiple_model(
     serialized_weights          BYTEA,
     is_final_training_call      BOOLEAN,
     use_caching                 BOOLEAN,
-    custom_function_map         BYTEA
+    object_table                TEXT
 )
 
 >>>)  -- m4_endif postgres

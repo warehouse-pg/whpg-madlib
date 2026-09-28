@@ -1628,7 +1628,7 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.fit_transition_multiple_model(
     serialized_weights         BYTEA,
     is_final_training_call     BOOLEAN,
     use_caching                BOOLEAN,
-    custom_function_map        BYTEA
+    object_table               TEXT
 ) RETURNS BYTEA AS $$
 PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
     import traceback

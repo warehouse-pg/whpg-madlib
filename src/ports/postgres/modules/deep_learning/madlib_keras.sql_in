@@ -1866,7 +1866,7 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.fit_transition(
     images_per_seg              INTEGER[],
     accessible_gpus_for_seg     INTEGER[],
     prev_serialized_weights     BYTEA,
-    custom_function_map         BYTEA
+    object_table                TEXT
 ) RETURNS BYTEA AS $$
 PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
     import traceback
@@ -1908,7 +1908,7 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.fit_transition_wide(
     images_per_seg              INTEGER[],
     accessible_gpus_for_seg     INTEGER[],
     prev_serialized_weights     BYTEA,
-    custom_function_map         BYTEA
+    object_table                TEXT
 ) RETURNS BYTEA AS $$
 PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
     import traceback
@@ -1987,7 +1987,7 @@ DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.fit_step(
     /* images_per_seg */         INTEGER[],
     /* segments_per_host  */     INTEGER[],
     /* prev_serialized_weights */BYTEA,
-    /* custom_loss_cfunction */  BYTEA);
+    /* object_table */           TEXT);
 CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     /* dep_var */                BYTEA,
     /* dep_var */                BYTEA,
@@ -2011,7 +2011,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     /* images_per_seg */         INTEGER[],
     /* segments_per_host  */     INTEGER[],
     /* prev_serialized_weights */BYTEA,
-    /* custom_loss_cfunction */  BYTEA
+    /* object_table */           TEXT
     )(
     STYPE=BYTEA,
     SFUNC=MADLIB_SCHEMA.fit_transition_wide,
@@ -2033,7 +2033,7 @@ DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.fit_step(
     INTEGER[],
     INTEGER[],
     BYTEA,
-    BYTEA);
+    TEXT);
 CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     /* dep_var */                BYTEA[],
     /* ind_var */                BYTEA[],
@@ -2049,7 +2049,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.fit_step(
     /* images_per_seg */         INTEGER[],
     /* accessible_gpus_for_seg */INTEGER[],
     /* prev_serialized_weights */BYTEA,
-    /* custom_loss_cfunction */  BYTEA
+    /* object_table */           TEXT
 )(
     STYPE=BYTEA,
     SFUNC=MADLIB_SCHEMA.fit_transition,
@@ -2267,7 +2267,7 @@ CREATE OR REPLACE FUNCTION MADLIB_SCHEMA.internal_keras_eval_transition(
     images_per_seg                     INTEGER[],
     accessible_gpus_for_seg            INTEGER[],
     should_clear_session               BOOLEAN,
-    custom_function_map                BYTEA
+    object_table                       TEXT
 ) RETURNS REAL[] AS $$
 PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
     return madlib_keras.internal_keras_eval_transition(**globals())
@@ -2306,7 +2306,7 @@ DROP AGGREGATE IF EXISTS MADLIB_SCHEMA.internal_keras_evaluate(
                                        INTEGER[],
                                        INTEGER[],
                                        BOOLEAN,
-                                       BYTEA);
+                                       TEXT);
 
 CREATE AGGREGATE MADLIB_SCHEMA.internal_keras_evaluate(
     /* dependent_var */             BYTEA[],
@@ -2323,7 +2323,7 @@ CREATE AGGREGATE MADLIB_SCHEMA.internal_keras_evaluate(
     /* images_per_seg*/             INTEGER[],
     /* accessible_gpus_for_seg */   INTEGER[],
     /* should_clear_session */      BOOLEAN,
-    /* custom_function_map */       BYTEA
+    /* object_table */              TEXT
 )(
     STYPE=REAL[],
     INITCOND='{0,0,0}',

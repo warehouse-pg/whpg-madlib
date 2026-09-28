@@ -22,6 +22,7 @@ from deep_learning.input_data_preprocessor import DistributionRulesOptions
 from deep_learning.keras_model_arch_table import ModelArchSchema
 from deep_learning.model_arch_info import get_num_classes
 from deep_learning.madlib_keras_custom_function import CustomFunctionSchema
+from deep_learning.madlib_keras_custom_function import validate_object_table
 from deep_learning.madlib_keras_helper import CLASS_VALUES_COLNAME
 from deep_learning.madlib_keras_helper import COMPILE_PARAMS_COLNAME
 from deep_learning.madlib_keras_helper import DEPENDENT_VARNAME_COLNAME
@@ -40,8 +41,6 @@ from utilities.utilities import _assert
 from utilities.utilities import add_postfix
 from utilities.utilities import is_platform_pg
 from utilities.utilities import is_var_valid
-from utilities.utilities import is_superuser
-from utilities.utilities import get_table_owner
 from utilities.validate_args import cols_in_tbl_valid
 from utilities.validate_args import columns_exist_in_table
 from utilities.validate_args import get_expr_type
@@ -338,8 +337,7 @@ class FitCommonValidator(object):
                 else:
                     raise e
 
-            _assert(is_superuser(get_table_owner(self.object_table)),
-                "DL: Cannot use a table of a non-superuser as object table.")
+            validate_object_table(self.object_table)
             cols_in_tbl_valid(self.object_table, CustomFunctionSchema.col_names, self.module_name)
 
         if self.warm_start:
@@ -595,8 +593,7 @@ class MstLoaderInputValidator():
         input_tbl_valid(self.model_arch_table, self.module_name)
         if self.object_table is not None:
             input_tbl_valid(self.object_table, self.module_name)
-            _assert(is_superuser(get_table_owner(self.object_table)),
-                "DL: Cannot use a table of a non-superuser as object table.")
+            validate_object_table(self.object_table)
         if self.module_name == 'load_model_selection_table' or self.module_name == 'madlib_keras_automl':
             output_tbl_valid(self.model_selection_table, self.module_name)
             output_tbl_valid(self.model_selection_summary_table, self.module_name)

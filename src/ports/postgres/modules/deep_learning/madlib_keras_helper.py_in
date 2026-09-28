@@ -214,7 +214,7 @@ def parse_shape(shape):
 def query_model_configs(model_selection_table, model_selection_summary_table,
     mst_key_col, model_arch_table_col):
     msts_query = """
-                 SELECT *, NULL as object_map FROM {model_selection_table}
+                 SELECT *, NULL as object_table FROM {model_selection_table}
                  ORDER BY {mst_key_col}
                  """.format(**locals())
     from deep_learning.madlib_keras_model_selection import ModelSelectionSchema
