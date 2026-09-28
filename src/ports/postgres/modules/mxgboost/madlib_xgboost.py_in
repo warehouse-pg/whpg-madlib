@@ -22,11 +22,14 @@ import re
 import pandas as pd
 import xgboost as xgb
 import numpy
-import pickle
 import zlib
 import ast
 import collections
+import io
 import itertools
+import json
+import os
+import tempfile
 from bisect import bisect_left
 from operator import itemgetter
 
@@ -45,6 +48,40 @@ from utilities.validate_args import get_expr_type
 from utilities.validate_args import input_tbl_valid
 from utilities.validate_args import output_tbl_valid
 from utilities.validate_args import cols_in_tbl_valid
+
+# Everything stored in or read from a table is kept in data-only formats
+# (JSON and XGBoost's native model format), so loading it can never run code.
+
+def _serialize_dataframe(df):
+    return zlib.compress(df.to_json(orient='table', index=False).encode('utf-8'))
+
+def _deserialize_dataframe(dframe):
+    return pd.read_json(io.StringIO(zlib.decompress(dframe).decode('utf-8')),
+                        orient='table')
+
+def _serialize_model(gbm):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        model_path = os.path.join(tmp_dir, 'model.json')
+        gbm.save_model(model_path)
+        with open(model_path, 'rb') as model_file:
+            return model_file.read()
+
+def _deserialize_model(model, mdl_table):
+    if model[:1] != b'{':
+        plpy.error("XGBoost: the model in table '{0}' was created by an earlier "
+                   "MADlib version and can no longer be loaded. Retrain the "
+                   "model with xgboost().".format(mdl_table))
+    gbm = xgb.XGBClassifier()
+    gbm.load_model(bytearray(model))
+    return gbm
+
+def _serialize_label_encoder(label_encoder):
+    return json.dumps(label_encoder.classes_.tolist()).encode('utf-8')
+
+def _deserialize_label_encoder(classes):
+    label_encoder = LabelEncoder()
+    label_encoder.classes_ = numpy.array(json.loads(classes.decode('utf-8')))
+    return label_encoder
 
 def serialize_pandas_dframe_as_bytea(schema_madlib, source_table, id_column,
                                      class_label, features):
@@ -65,8 +102,7 @@ def serialize_pandas_dframe_as_bytea(schema_madlib, source_table, id_column,
     df = pd.DataFrame.from_records(result)
     df_filtered = df.dropna(axis=1, how='all')
 
-    compressed = zlib.compress(pickle.dumps(df_filtered))
-    return compressed
+    return _serialize_dataframe(df_filtered)
 
 def print_prec_rec_fscore_support(mat, metric_labels, class_label, class_values):
     """
@@ -126,7 +162,7 @@ def xgboost_train(schema_madlib, dframe, features_all, class_label, params,
     - Calculate metrics to report
     """
 
-    df = pickle.loads(zlib.decompress(dframe))
+    df = _deserialize_dataframe(dframe)
     features_all.append(id_column)
     features = [x for x in df.columns if x in features_all]
     X = df[features].values
@@ -223,10 +259,10 @@ def xgboost_train(schema_madlib, dframe, features_all, class_label, params,
     fnames, f_importance_scores = zip(*fnames_importances)
     important_features = pd.DataFrame(fnames_importances)
 
-    return (features, pickle.dumps(gbm), params, fnames, f_importance_scores,
+    return (features, _serialize_model(gbm), params, fnames, f_importance_scores,
         model_metrics.iloc[:,1].values.tolist(), model_metrics.iloc[:,2].values.tolist(),
         model_metrics.iloc[:,3].values.tolist(),model_metrics.iloc[:,4].values.tolist(),
-        test_ids, pickle.dumps(label_encoder))
+        test_ids, _serialize_label_encoder(label_encoder))
 
 def xgboost_grid_search(schema_madlib, source_table, id_column, class_label,
                         list_of_features, list_of_features_to_exclude,
@@ -426,9 +462,8 @@ def xgboost_predict(schema_madlib, scoring_tbl, mdl_table, mdl_output_tbl,
     model = result[0]['model']
     label_encoder = result[0]['label_encoder']
     features = result[0]['features']
-    #Train gradient boosted trees
-    gbm = pickle.loads(model)
-    label_encoder = pickle.loads(label_encoder)
+    gbm = _deserialize_model(model, mdl_table)
+    label_encoder = _deserialize_label_encoder(label_encoder)
     #Fetch features from test dataset for scoring
     if isinstance(features, list):
         features_str = ','.join(features)

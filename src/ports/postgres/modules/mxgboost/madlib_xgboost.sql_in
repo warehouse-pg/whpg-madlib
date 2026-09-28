@@ -160,8 +160,10 @@ SELECT xgboost(
     <table class="output">
       <tr>
         <th>model</th>
-        <td>BYTEA8. Trained XGBoost model stored in binary
-        format (not human readable).</td>
+        <td>BYTEA8. Trained XGBoost model stored in XGBoost's native
+        JSON model format. Models trained by MADlib 2.1.0 or earlier use a
+        different format and must be retrained before they can be used with
+        xgboost_predict().</td>
       </tr>
       <tr>
         <th>features</th>
