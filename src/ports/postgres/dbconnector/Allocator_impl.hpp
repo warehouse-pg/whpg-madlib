@@ -348,6 +348,10 @@ Allocator::isAlignedBlock(void *inPtr) const {
 #if MAXIMUM_ALIGNOF >= 16
     // makeAligned() is a no-op here, so there is no cookie to check and no
     // way to tell a foreign block apart.
+    static_assert(MAXIMUM_ALIGNOF < 16,
+        "isAlignedBlock() cannot distinguish our blocks from foreign ones "
+        "once MAXIMUM_ALIGNOF >= 16; PG caps it at 8 on every supported "
+        "platform, so this assumption should never actually fail");
     (void) inPtr;
     return true;
 #else
