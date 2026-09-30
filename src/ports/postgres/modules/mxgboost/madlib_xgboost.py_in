@@ -91,7 +91,11 @@ def _serialize_model(gbm):
         model_path = os.path.join(tmp_dir, 'model.json')
         gbm.save_model(model_path)
         with open(model_path, 'rb') as model_file:
-            return model_file.read()
+            model = model_file.read()
+    if model[:1] != b'{':
+        plpy.error("XGBoost: the installed xgboost version does not write the "
+                   "JSON model format. XGBoost v1.0 or later is required.")
+    return model
 
 def _deserialize_model(model, mdl_table):
     if model[:1] != b'{':
