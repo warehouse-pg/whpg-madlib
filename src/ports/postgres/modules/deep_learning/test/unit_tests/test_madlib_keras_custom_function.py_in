@@ -68,6 +68,12 @@ class ObjectTableTrustTestCase(unittest.TestCase):
                          self.subject.validate_object_table('madlib.custom_fn_table'))
         args, _ = plpy.execute.call_args
         self.assertEqual(['madlib.custom_fn_table'], args[1])
+        # The name handed back must be pinned to the schema found in the
+        # catalog, not left to search_path resolution.
+        lookup_sql, _ = plpy.prepare.call_args[0]
+        self.assertIn('quote_ident(n.nspname)', lookup_sql)
+        self.assertIn('quote_ident(c.relname)', lookup_sql)
+        self.assertNotIn('regclass::text', lookup_sql)
 
     def test_validate_object_table_rejects_non_superuser_owner(self):
         plpy.execute.return_value = self.catalog_row(owner_is_superuser=False)

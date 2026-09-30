@@ -74,16 +74,20 @@ def validate_object_table(object_table):
     Deserializing a custom function runs the code stored in it, so a table
     is accepted only when a superuser owns it. On WarehousePG it must also be
     replicated, because segments read it while training and evaluating.
-    Returns the table's schema-qualified name as resolved by the catalog.
+    Returns the table's name qualified with its schema, so that a later
+    query cannot be redirected by search_path to another table of the same
+    name.
     """
     policy_col = "NULL" if is_platform_pg() else "d.policytype"
     policy_join = "" if is_platform_pg() else \
         "LEFT JOIN pg_catalog.gp_distribution_policy d ON d.localoid = c.oid"
     plan = plpy.prepare("""
-        SELECT c.oid::pg_catalog.regclass::text AS qualified_name,
+        SELECT pg_catalog.quote_ident(n.nspname) || '.' ||
+               pg_catalog.quote_ident(c.relname) AS qualified_name,
                r.rolsuper AS owner_is_superuser,
                {policy_col} AS policytype
         FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         JOIN pg_catalog.pg_roles r ON r.oid = c.relowner
         {policy_join}
         WHERE c.oid = $1::pg_catalog.regclass
