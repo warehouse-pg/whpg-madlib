@@ -24,8 +24,9 @@ import xgboost as xgb
 import numpy
 import zlib
 import ast
+import base64
 import collections
-import io
+import decimal
 import itertools
 import json
 import os
@@ -51,13 +52,39 @@ from utilities.validate_args import cols_in_tbl_valid
 
 # Everything stored in or read from a table is kept in data-only formats
 # (JSON and XGBoost's native model format), so loading it can never run code.
+# Python's json keeps every value exactly as PL/Python returned it: floats
+# round-trip exactly, and the two PL/Python types JSON lacks, Decimal (NUMERIC)
+# and bytes (BYTEA), are tagged so they come back with their own type.
+
+def _json_default(value):
+    if isinstance(value, decimal.Decimal):
+        return {'__decimal__': str(value)}
+    if isinstance(value, bytes):
+        return {'__bytes__': base64.b64encode(value).decode('ascii')}
+    raise TypeError("XGBoost: cannot serialize a value of type {0}".format(
+        type(value).__name__))
+
+def _json_object_hook(obj):
+    if len(obj) == 1 and '__decimal__' in obj:
+        return decimal.Decimal(obj['__decimal__'])
+    if len(obj) == 1 and '__bytes__' in obj:
+        return base64.b64decode(obj['__bytes__'])
+    return obj
+
+def _to_json(value):
+    return json.dumps(value, default=_json_default).encode('utf-8')
+
+def _from_json(data):
+    return json.loads(data.decode('utf-8'), object_hook=_json_object_hook)
 
 def _serialize_dataframe(df):
-    return zlib.compress(df.to_json(orient='table', index=False).encode('utf-8'))
+    columns = df.columns.tolist()
+    rows = [[row[c] for c in columns] for row in df.to_dict('records')]
+    return zlib.compress(_to_json({'columns': columns, 'rows': rows}))
 
 def _deserialize_dataframe(dframe):
-    return pd.read_json(io.StringIO(zlib.decompress(dframe).decode('utf-8')),
-                        orient='table')
+    data = _from_json(zlib.decompress(dframe))
+    return pd.DataFrame.from_records(data['rows'], columns=data['columns'])
 
 def _serialize_model(gbm):
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -76,11 +103,13 @@ def _deserialize_model(model, mdl_table):
     return gbm
 
 def _serialize_label_encoder(label_encoder):
-    return json.dumps(label_encoder.classes_.tolist()).encode('utf-8')
+    classes = label_encoder.classes_
+    return _to_json({'dtype': classes.dtype.str, 'classes': classes.tolist()})
 
-def _deserialize_label_encoder(classes):
+def _deserialize_label_encoder(label_encoder_json):
+    data = _from_json(label_encoder_json)
     label_encoder = LabelEncoder()
-    label_encoder.classes_ = numpy.array(json.loads(classes.decode('utf-8')))
+    label_encoder.classes_ = numpy.array(data['classes'], dtype=data['dtype'])
     return label_encoder
 
 def serialize_pandas_dframe_as_bytea(schema_madlib, source_table, id_column,
