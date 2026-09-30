@@ -4340,3 +4340,29 @@ SELECT xgboost_predict(
     'xgb_text_score_out',    -- predict_output_table
     'id_text'                -- id_column
 );
+
+-- Training data reaches xgboost unchanged: 'tiny' separates the classes only
+-- at 1e-12 scale, 'event_time' has a date-like name, 'amount' is NUMERIC.
+CREATE TABLE xgb_exact AS
+SELECT i AS id,
+       (i % 2 + 1) * 1e-12::float8 AS tiny,
+       1700000000 + i AS event_time,
+       ((i % 7) / 4.0)::numeric AS amount,
+       i % 2 AS label
+FROM generate_series(1, 100) i;
+
+SELECT xgboost('xgb_exact', 'xgb_exact_out', 'id', 'label', '*');
+SELECT assert('tiny' = ANY(fnames), 'xgboost should split on the 1e-12 scale feature')
+    FROM xgb_exact_out_summary;
+
+SELECT xgboost_predict('xgb_exact', 'xgb_exact_out', 'xgb_exact_score_out', 'id', 'label', 1);
+SELECT assert(COUNT(*) = 100, 'xgboost_predict should predict every row correctly')
+    FROM xgb_exact_score_out s JOIN xgb_exact e USING (id)
+    WHERE s.label_predicted = e.label::text;
+
+-- A model that is not in XGBoost's JSON format (e.g. from an earlier MADlib
+-- version) is rejected before it is loaded
+UPDATE xgb_exact_out SET model = 'not a model'::bytea;
+SELECT assert(trap_error($$SELECT xgboost_predict('xgb_exact', 'xgb_exact_out',
+                         'xgb_exact_old_out', 'id', 'label', 1)$$) = 1,
+              'xgboost_predict should reject a model in an old format');
