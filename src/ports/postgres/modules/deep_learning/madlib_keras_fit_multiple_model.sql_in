@@ -1647,4 +1647,4 @@ PythonFunctionBodyOnlyNoSchema(`deep_learning', `madlib_keras')
         e.args = (message,)
         raise e
 $$ LANGUAGE plpython3u
-m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `NO SQL', `');
+m4_ifdef(`__HAS_FUNCTION_PROPERTIES__', `READS SQL DATA', `');
