@@ -56,12 +56,12 @@ without grid search, the XGBoost is using only a single segment which might
 increase the run time.
 
 XGBoost requires the following python libraries available in every host machine:
-- pandas v0.42
-- scikit-learn v0.19
-- xgboost v0.82
+- pandas
+- scikit-learn
+- xgboost v1.0 or later (tested with v1.7)
 
-Versions are provided to ensure a python2 supported libraries can be obtained.
-Other versions of these libraries might work just as well.
+Models are stored in XGBoost's native JSON model format, which was introduced
+in XGBoost v1.0. Earlier versions cannot write it and are not supported.
 
 @anchor train
 @par Training Function
