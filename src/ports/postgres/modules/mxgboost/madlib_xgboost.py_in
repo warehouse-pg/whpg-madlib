@@ -103,7 +103,11 @@ def _deserialize_model(model, mdl_table):
                    "MADlib version and can no longer be loaded. Retrain the "
                    "model with xgboost().".format(mdl_table))
     gbm = xgb.XGBClassifier()
-    gbm.load_model(bytearray(model))
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        model_path = os.path.join(tmp_dir, 'model.json')
+        with open(model_path, 'wb') as model_file:
+            model_file.write(model)
+        gbm.load_model(model_path)
     return gbm
 
 def _serialize_label_encoder(label_encoder):
