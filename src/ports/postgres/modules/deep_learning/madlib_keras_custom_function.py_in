@@ -131,7 +131,7 @@ def load_custom_function(schema_madlib, object_table, object, name, description=
     if object_table is not None:
         object_table = "{0}.{1}".format(schema_madlib, quote_ident(object_table))
     _assert(is_superuser(current_user()), "DL: The user has to have admin "\
-        "privilages to load a custom function")
+        "privileges to load a custom function")
     _validate_object(object)
     _assert(name is not None,
             "{0}: function name cannot be NULL!".format(module_name))
@@ -197,7 +197,7 @@ def delete_custom_function(schema_madlib, object_table, id=None, name=None, **kw
 
     input_tbl_valid(object_table, "Keras Custom Funtion")
     _assert(is_superuser(current_user()), "DL: The user has to have admin "\
-        "privilages to delete a custom function")
+        "privileges to delete a custom function")
     _assert(id is not None or name is not None,
             "{0}: function id/name cannot be NULL! " \
             "Use \"SELECT delete_custom_function('usage')\" for help.".format(module_name))
