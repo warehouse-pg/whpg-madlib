@@ -71,7 +71,7 @@ from the table.
 Do not specify a schema for the argument 'object_table' containing the Python objects,
 because the 'object_table' is automatically put in the MADlib schema.
 Also, any subsequent SQL queries on this table by regular users must
-specify '<madlib_schema>.object_table' in the usual way.
+specify '\<madlib_schema\>.object_table' in the usual way.
 
 @note
 Loading a custom function runs the Python code stored in it, so the
@@ -82,7 +82,7 @@ On WarehousePG the object table must be replicated, because every segment
 reads it while training and evaluating; tables created by this function
 are replicated automatically, and a table created by an earlier MADlib
 version must be converted with
-<code>ALTER TABLE <madlib_schema>.object_table SET DISTRIBUTED REPLICATED</code>.
+<code>ALTER TABLE \<madlib_schema\>.object_table SET DISTRIBUTED REPLICATED</code>.
 
 @anchor load_function
 @par Load Function
