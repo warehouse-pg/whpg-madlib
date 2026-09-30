@@ -58,10 +58,12 @@ increase the run time.
 XGBoost requires the following python libraries available in every host machine:
 - pandas
 - scikit-learn
-- xgboost v1.0 or later (tested with v1.7)
+- xgboost v1.0 to v2.0 (tested with v1.7)
 
 Models are stored in XGBoost's native JSON model format, which was introduced
 in XGBoost v1.0. Earlier versions cannot write it and are not supported.
+XGBoost v2.1 removed the fit() arguments that the training function uses, so
+later versions are not supported either.
 
 @anchor train
 @par Training Function
