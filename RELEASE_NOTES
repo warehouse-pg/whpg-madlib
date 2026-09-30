@@ -18,7 +18,9 @@ Security fixes:
     - XGBoost: Store models, label encoders and training data in data-only
     formats (XGBoost native JSON, JSON) instead of pickle. Models trained by
     MADlib 2.1.0 or earlier must be retrained before xgboost_predict() can
-    use them.
+    use them. The XGBoost module now requires the xgboost Python package
+    v1.0 to v2.0: earlier versions cannot write the JSON model format, and
+    v2.1 removed fit() arguments the training function uses.
     - DL: Read custom functions only from a superuser-owned object table,
     verified on every code path including madlib_keras_evaluate() and the
     internal transition functions, which now take the object table name
