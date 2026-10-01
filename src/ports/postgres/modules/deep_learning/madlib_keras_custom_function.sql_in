@@ -76,9 +76,10 @@ specify '\<madlib_schema\>.object_table' in the usual way.
 @note
 Loading a custom function runs the Python code stored in it, so the
 deep learning functions only read custom functions from a regular table
-that is owned by a superuser and on which no other role holds INSERT,
-UPDATE or TRUNCATE, because such a grant would give that role code
-execution on the database server.
+that is owned by a superuser and on which no role other than the owner or
+a superuser holds INSERT, UPDATE, TRUNCATE or TRIGGER, on the table or any
+of its columns, because such a grant would give that role code execution
+on the database server.
 On WarehousePG the object table must be replicated, because every segment
 reads it while training and evaluating; tables created by this function
 are replicated automatically, and a table created by an earlier MADlib

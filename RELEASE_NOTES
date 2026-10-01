@@ -23,7 +23,8 @@ Security fixes:
     v2.1 removed fit() arguments the training function uses. xgboost v2.0
     needs scikit-learn below v1.6 to load stored models.
     - DL: Read custom functions only from a superuser-owned regular table on
-    which no other role holds INSERT, UPDATE or TRUNCATE, verified on every
+    which no role other than the owner or a superuser holds INSERT, UPDATE,
+    TRUNCATE or TRIGGER, on the table or any of its columns, verified on every
     code path including madlib_keras_evaluate() and the
     internal transition functions, which now take the object table name
     instead of serialized function objects. load_custom_function() checks
