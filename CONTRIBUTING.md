@@ -2,7 +2,7 @@
 
 We warmly welcome and greatly appreciate contributions from the
 community. By participating you agree to the [code of
-conduct](https://github.com/warehouse-pg/whpg-madlib/blob/main/CODE-OF-CONDUCT.md).
+conduct](https://github.com/warehouse-pg/whpg-madlib/blob/madlib2-master/CODE-OF-CONDUCT.md).
 Overall, we follow WHPG's comprehensive contribution policy. Please
 refer to it [here](https://github.com/warehouse-pg/warehouse-pg/blob/main/CONTRIBUTING.md)
 for details.
@@ -20,7 +20,7 @@ for details.
 * Try and follow similar coding styles as found throughout the code
   base.
 * Make commits as logical units for ease of reviewing.
-* Rebase with main often to stay in sync with upstream.
+* Rebase with `madlib2-master` often to stay in sync with upstream.
 * Add or update tests to cover your code. Build with `cmake` and
   `make`, then run install-check against your target database, e.g.
   `src/bin/madpack -p postgres -c
@@ -43,9 +43,9 @@ git commit --fixup <commit SHA>
   -- or --
 git commit --squash <commit SHA>
 ```
-* Once approved, before merging into main squash your fixups with:
+* Once approved, before merging into `madlib2-master` squash your fixups with:
 ```
-git rebase -i --autosquash origin/main
+git rebase -i --autosquash origin/madlib2-master
 git push --force-with-lease $USER <my-feature-branch>
 ```
 
