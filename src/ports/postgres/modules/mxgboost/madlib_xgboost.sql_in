@@ -65,7 +65,7 @@ in XGBoost v1.0. Earlier versions cannot write it and are not supported.
 XGBoost v2.1 removed the fit() arguments that the training function uses, so
 later versions are not supported either. XGBoost v2.0 cannot load a stored
 model when scikit-learn v1.6 or later is installed, so pair it with an earlier
-scikit-learn or use XGBoost v1.x.
+scikit-learn or use XGBoost v1.x; xgboost() rejects that pair before training.
 
 @anchor train
 @par Training Function
