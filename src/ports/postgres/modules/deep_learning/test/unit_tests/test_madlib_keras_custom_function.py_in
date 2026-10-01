@@ -57,9 +57,12 @@ class ObjectTableTrustTestCase(unittest.TestCase):
     def tearDown(self):
         self.module_patcher.stop()
 
-    def catalog_row(self, owner_is_superuser=True, policytype=None):
+    def catalog_row(self, owner_is_superuser=True, policytype=None,
+                    is_table=True, has_other_writers=False):
         return FakeResult([{'qualified_name': 'madlib.custom_fn_table',
+                            'is_table': is_table,
                             'owner_is_superuser': owner_is_superuser,
+                            'has_other_writers': has_other_writers,
                             'policytype': policytype}])
 
     def test_validate_object_table_accepts_superuser_owned_table(self):
@@ -80,6 +83,20 @@ class ObjectTableTrustTestCase(unittest.TestCase):
         with self.assertRaises(plpy.PLPYException) as error:
             self.subject.validate_object_table('madlib.custom_fn_table')
         self.assertIn('non-superuser', str(error.exception))
+
+    def test_validate_object_table_rejects_non_table(self):
+        plpy.execute.return_value = self.catalog_row(is_table=False)
+        with self.assertRaises(plpy.PLPYException) as error:
+            self.subject.validate_object_table('madlib.custom_fn_table')
+        self.assertIn('regular table', str(error.exception))
+
+    def test_validate_object_table_rejects_table_other_roles_can_write(self):
+        plpy.execute.return_value = self.catalog_row(has_other_writers=True)
+        with self.assertRaises(plpy.PLPYException) as error:
+            self.subject.validate_object_table('madlib.custom_fn_table')
+        self.assertIn('INSERT, UPDATE or TRUNCATE', str(error.exception))
+        lookup_sql, _ = plpy.prepare.call_args[0]
+        self.assertIn('aclexplode(c.relacl)', lookup_sql)
 
     def test_validate_object_table_rejects_missing_table(self):
         plpy.execute.return_value = FakeResult([])

@@ -44,6 +44,11 @@ old_vers = sys.argv[2]
 new_vers = sys.argv[3]
 ch_filename = sys.argv[4]
 
+for vers in (old_vers, new_vers):
+    if vers.startswith('-'):
+        print("Version branch/tag '{0}' must not start with '-'".format(vers))
+        raise SystemExit
+
 
 def run(args, out_path=None):
     """Run a command without a shell, sending stdout to out_path or discarding it."""

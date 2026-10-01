@@ -72,7 +72,8 @@ def validate_object_table(object_table):
     """Check that object_table may be used as a source of custom functions.
 
     Deserializing a custom function runs the code stored in it, so a table
-    is accepted only when a superuser owns it. On WarehousePG it must also be
+    is accepted only when it is a regular table that a superuser owns and
+    that no other role may write to. On WarehousePG it must also be
     replicated, because segments read it while training and evaluating.
     Returns the table's name qualified with its schema, so that a later
     query cannot be redirected by search_path to another table of the same
@@ -84,7 +85,12 @@ def validate_object_table(object_table):
     plan = plpy.prepare("""
         SELECT pg_catalog.quote_ident(n.nspname) || '.' ||
                pg_catalog.quote_ident(c.relname) AS qualified_name,
+               c.relkind = 'r' AS is_table,
                r.rolsuper AS owner_is_superuser,
+               EXISTS (SELECT 1 FROM pg_catalog.aclexplode(c.relacl) a
+                       WHERE a.grantee <> c.relowner
+                         AND a.privilege_type IN ('INSERT', 'UPDATE', 'TRUNCATE')
+                      ) AS has_other_writers,
                {policy_col} AS policytype
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
@@ -95,8 +101,14 @@ def validate_object_table(object_table):
     res = plpy.execute(plan, [object_table])
     _assert(res.nrows() == 1,
             "DL: Object table '{0}' does not exist.".format(object_table))
+    _assert(res[0]['is_table'],
+            "DL: Object table '{0}' must be a regular table.".format(
+                res[0]['qualified_name']))
     _assert(res[0]['owner_is_superuser'],
             "DL: Cannot use a table of a non-superuser as object table.")
+    _assert(not res[0]['has_other_writers'],
+            "DL: Object table '{0}' must not grant INSERT, UPDATE or TRUNCATE "
+            "to any role other than its owner.".format(res[0]['qualified_name']))
     if not is_platform_pg():
         _assert(res[0]['policytype'] == 'r',
                 "DL: Object table '{0}' must be replicated so that every "
