@@ -464,6 +464,39 @@ SELECT assert(MADLIB_SCHEMA.trap_error($MAD$
 $MAD$) = 1, 'Object table with INSERT granted to PUBLIC should be rejected');
 REVOKE INSERT ON MADLIB_SCHEMA.test_custom_function_table FROM PUBLIC;
 
+-- The same holds for a column grant and for TRIGGER
+GRANT UPDATE (object) ON MADLIB_SCHEMA.test_custom_function_table TO PUBLIC;
+SELECT assert(MADLIB_SCHEMA.trap_error($MAD$
+  SELECT load_model_selection_table(
+    'iris_model_arch',
+    'mst_object_table',
+    ARRAY[1],
+    ARRAY[
+        $$loss='categorical_crossentropy', optimizer='Adam(lr=0.01)', metrics=['categorical_accuracy']$$
+    ],
+    ARRAY[
+        $$batch_size=16, epochs=1$$
+    ],
+    'test_custom_function_table')
+$MAD$) = 1, 'Object table with UPDATE (object) granted to PUBLIC should be rejected');
+REVOKE UPDATE (object) ON MADLIB_SCHEMA.test_custom_function_table FROM PUBLIC;
+
+GRANT TRIGGER ON MADLIB_SCHEMA.test_custom_function_table TO PUBLIC;
+SELECT assert(MADLIB_SCHEMA.trap_error($MAD$
+  SELECT load_model_selection_table(
+    'iris_model_arch',
+    'mst_object_table',
+    ARRAY[1],
+    ARRAY[
+        $$loss='categorical_crossentropy', optimizer='Adam(lr=0.01)', metrics=['categorical_accuracy']$$
+    ],
+    ARRAY[
+        $$batch_size=16, epochs=1$$
+    ],
+    'test_custom_function_table')
+$MAD$) = 1, 'Object table with TRIGGER granted to PUBLIC should be rejected');
+REVOKE TRIGGER ON MADLIB_SCHEMA.test_custom_function_table FROM PUBLIC;
+
 DROP TABLE IF EXISTS mst_object_table, mst_object_table_summary;
 SELECT load_model_selection_table(
     'iris_model_arch',

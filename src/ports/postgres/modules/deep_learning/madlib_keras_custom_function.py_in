@@ -73,8 +73,10 @@ def validate_object_table(object_table):
 
     Deserializing a custom function runs the code stored in it, so a table
     is accepted only when it is a regular table that a superuser owns and
-    that no other role may write to. On WarehousePG it must also be
-    replicated, because segments read it while training and evaluating.
+    that no role other than the owner or a superuser may write to or put a
+    trigger on, through a table or a column grant. On WarehousePG it must
+    also be replicated, because segments read it while training and
+    evaluating.
     Returns the table's name qualified with its schema, so that a later
     query cannot be redirected by search_path to another table of the same
     name.
@@ -88,8 +90,21 @@ def validate_object_table(object_table):
                c.relkind = 'r' AS is_table,
                r.rolsuper AS owner_is_superuser,
                EXISTS (SELECT 1 FROM pg_catalog.aclexplode(c.relacl) a
-                       WHERE a.grantee <> c.relowner
-                         AND a.privilege_type IN ('INSERT', 'UPDATE', 'TRUNCATE')
+                       WHERE a.privilege_type IN
+                             ('INSERT', 'UPDATE', 'TRUNCATE', 'TRIGGER')
+                         AND a.grantee <> c.relowner
+                         AND NOT COALESCE((SELECT g.rolsuper
+                                           FROM pg_catalog.pg_roles g
+                                           WHERE g.oid = a.grantee), FALSE)
+                      ) OR
+               EXISTS (SELECT 1 FROM pg_catalog.pg_attribute att,
+                                     pg_catalog.aclexplode(att.attacl) a
+                       WHERE att.attrelid = c.oid
+                         AND a.privilege_type IN ('INSERT', 'UPDATE')
+                         AND a.grantee <> c.relowner
+                         AND NOT COALESCE((SELECT g.rolsuper
+                                           FROM pg_catalog.pg_roles g
+                                           WHERE g.oid = a.grantee), FALSE)
                       ) AS has_other_writers,
                {policy_col} AS policytype
         FROM pg_catalog.pg_class c
@@ -107,8 +122,9 @@ def validate_object_table(object_table):
     _assert(res[0]['owner_is_superuser'],
             "DL: Cannot use a table of a non-superuser as object table.")
     _assert(not res[0]['has_other_writers'],
-            "DL: Object table '{0}' must not grant INSERT, UPDATE or TRUNCATE "
-            "to any role other than its owner.".format(res[0]['qualified_name']))
+            "DL: Object table '{0}' must not grant INSERT, UPDATE, TRUNCATE "
+            "or TRIGGER, on the table or any of its columns, to a role that "
+            "is not a superuser.".format(res[0]['qualified_name']))
     if not is_platform_pg():
         _assert(res[0]['policytype'] == 'r',
                 "DL: Object table '{0}' must be replicated so that every "

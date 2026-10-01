@@ -94,9 +94,14 @@ class ObjectTableTrustTestCase(unittest.TestCase):
         plpy.execute.return_value = self.catalog_row(has_other_writers=True)
         with self.assertRaises(plpy.PLPYException) as error:
             self.subject.validate_object_table('madlib.custom_fn_table')
-        self.assertIn('INSERT, UPDATE or TRUNCATE', str(error.exception))
+        self.assertIn('INSERT, UPDATE, TRUNCATE or TRIGGER', str(error.exception))
+        # Table and column grants are both checked, and superuser grantees
+        # are allowed.
         lookup_sql, _ = plpy.prepare.call_args[0]
         self.assertIn('aclexplode(c.relacl)', lookup_sql)
+        self.assertIn('aclexplode(att.attacl)', lookup_sql)
+        self.assertIn("'TRIGGER'", lookup_sql)
+        self.assertIn('g.rolsuper', lookup_sql)
 
     def test_validate_object_table_rejects_missing_table(self):
         plpy.execute.return_value = FakeResult([])
