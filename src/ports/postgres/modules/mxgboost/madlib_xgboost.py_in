@@ -34,6 +34,7 @@ import tempfile
 from bisect import bisect_left
 from operator import itemgetter
 
+import sklearn
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import confusion_matrix
@@ -86,6 +87,15 @@ def _deserialize_dataframe(dframe):
     data = _from_json(zlib.decompress(dframe))
     return pd.DataFrame.from_records(data['rows'], columns=data['columns'])
 
+def _check_xgboost_version():
+    """Training needs xgboost v1.0 (first to write the JSON model format)
+    to v2.0 (last whose fit() accepts eval_metric)."""
+    match = re.match(r'(\d+)\.(\d+)', xgb.__version__)
+    version = tuple(int(n) for n in match.groups()) if match else None
+    _assert(version is not None and (1, 0) <= version <= (2, 0),
+            "XGBoost: xgboost v1.0 to v2.0 is required, found v{0}.".format(
+                xgb.__version__))
+
 def _serialize_model(gbm):
     with tempfile.TemporaryDirectory() as tmp_dir:
         model_path = os.path.join(tmp_dir, 'model.json')
@@ -107,7 +117,18 @@ def _deserialize_model(model, mdl_table):
         model_path = os.path.join(tmp_dir, 'model.json')
         with open(model_path, 'wb') as model_file:
             model_file.write(model)
-        gbm.load_model(model_path)
+        try:
+            gbm.load_model(model_path)
+        except AttributeError as e:
+            # xgboost v2.0 load_model() calls sklearn.base.is_classifier(),
+            # which from scikit-learn v1.6 uses a tags protocol xgboost v2.0
+            # does not implement.
+            if '__sklearn_tags__' not in str(e):
+                raise
+            plpy.error("XGBoost: xgboost v{0} cannot load models with "
+                       "scikit-learn v{1}. Use scikit-learn below v1.6 with "
+                       "xgboost v2.0, or xgboost v1.x.".format(
+                           xgb.__version__, sklearn.__version__))
     return gbm
 
 def _serialize_label_encoder(label_encoder):
@@ -116,8 +137,17 @@ def _serialize_label_encoder(label_encoder):
 
 def _deserialize_label_encoder(label_encoder_json):
     data = _from_json(label_encoder_json)
+    try:
+        dtype = numpy.dtype(data['dtype'])
+    except TypeError:
+        dtype = None
+    # Labels are booleans, numbers or strings; anything else did not come
+    # from _serialize_label_encoder().
+    _assert(dtype is not None and dtype.kind in 'biufUO',
+            "XGBoost: unexpected label type '{0}' in the model.".format(
+                data['dtype']))
     label_encoder = LabelEncoder()
-    label_encoder.classes_ = numpy.array(data['classes'], dtype=data['dtype'])
+    label_encoder.classes_ = numpy.array(data['classes'], dtype=dtype)
     return label_encoder
 
 def serialize_pandas_dframe_as_bytea(schema_madlib, source_table, id_column,
@@ -309,6 +339,7 @@ def xgboost_grid_search(schema_madlib, source_table, id_column, class_label,
     Run multiple xgboost workloads in parallel via grid search.
     """
 
+    _check_xgboost_version()
     input_tbl_valid(source_table, 'XGBoost')
     cols_in_tbl_valid(source_table, [id_column, class_label], 'XGBoost')
     if train_set_split_var is not None:

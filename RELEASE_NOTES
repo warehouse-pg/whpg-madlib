@@ -20,9 +20,11 @@ Security fixes:
     MADlib 2.1.0 or earlier must be retrained before xgboost_predict() can
     use them. The XGBoost module now requires the xgboost Python package
     v1.0 to v2.0: earlier versions cannot write the JSON model format, and
-    v2.1 removed fit() arguments the training function uses.
-    - DL: Read custom functions only from a superuser-owned object table,
-    verified on every code path including madlib_keras_evaluate() and the
+    v2.1 removed fit() arguments the training function uses. xgboost v2.0
+    needs scikit-learn below v1.6 to load stored models.
+    - DL: Read custom functions only from a superuser-owned regular table on
+    which no other role holds INSERT, UPDATE or TRUNCATE, verified on every
+    code path including madlib_keras_evaluate() and the
     internal transition functions, which now take the object table name
     instead of serialized function objects. load_custom_function() checks
     for superuser before deserializing. On WarehousePG, object tables are
