@@ -21,7 +21,8 @@ Security fixes:
     use them. The XGBoost module now requires the xgboost Python package
     v1.0 to v2.0: earlier versions cannot write the JSON model format, and
     v2.1 removed fit() arguments the training function uses. xgboost v2.0
-    needs scikit-learn below v1.6 to load stored models.
+    needs scikit-learn below v1.6 to load stored models, and xgboost()
+    rejects that pair before training.
     - DL: Read custom functions only from a superuser-owned regular table on
     which no role other than the owner or a superuser holds INSERT, UPDATE,
     TRUNCATE or TRIGGER, on the table or any of its columns, verified on every

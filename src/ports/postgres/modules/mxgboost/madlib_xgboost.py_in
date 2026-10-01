@@ -87,14 +87,28 @@ def _deserialize_dataframe(dframe):
     data = _from_json(zlib.decompress(dframe))
     return pd.DataFrame.from_records(data['rows'], columns=data['columns'])
 
+def _major_minor(version):
+    match = re.match(r'(\d+)\.(\d+)', version)
+    return tuple(int(n) for n in match.groups()) if match else None
+
+def _sklearn_mismatch_message():
+    return ("XGBoost: xgboost v{0} cannot load models with scikit-learn v{1}. "
+            "Use scikit-learn below v1.6 with xgboost v2.0, or xgboost "
+            "v1.x.".format(xgb.__version__, sklearn.__version__))
+
 def _check_xgboost_version():
     """Training needs xgboost v1.0 (first to write the JSON model format)
-    to v2.0 (last whose fit() accepts eval_metric)."""
-    match = re.match(r'(\d+)\.(\d+)', xgb.__version__)
-    version = tuple(int(n) for n in match.groups()) if match else None
+    to v2.0 (last whose fit() accepts eval_metric). xgboost v2.0 cannot load
+    the stored model back with scikit-learn v1.6 or later, so that pair is
+    rejected here, before training, instead of at prediction."""
+    version = _major_minor(xgb.__version__)
     _assert(version is not None and (1, 0) <= version <= (2, 0),
             "XGBoost: xgboost v1.0 to v2.0 is required, found v{0}.".format(
                 xgb.__version__))
+    sklearn_version = _major_minor(sklearn.__version__)
+    _assert(not (version == (2, 0) and sklearn_version is not None and
+                 sklearn_version >= (1, 6)),
+            _sklearn_mismatch_message())
 
 def _serialize_model(gbm):
     with tempfile.TemporaryDirectory() as tmp_dir:
@@ -125,10 +139,7 @@ def _deserialize_model(model, mdl_table):
             # does not implement.
             if '__sklearn_tags__' not in str(e):
                 raise
-            plpy.error("XGBoost: xgboost v{0} cannot load models with "
-                       "scikit-learn v{1}. Use scikit-learn below v1.6 with "
-                       "xgboost v2.0, or xgboost v1.x.".format(
-                           xgb.__version__, sklearn.__version__))
+            plpy.error(_sklearn_mismatch_message())
     return gbm
 
 def _serialize_label_encoder(label_encoder):
