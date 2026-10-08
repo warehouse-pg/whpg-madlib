@@ -1,10 +1,20 @@
+whpg-madlib
+===========
+
 ![](doc/imgs/magnetic-icon.png?raw=True) ![](doc/imgs/agile-icon.png?raw=True) ![](doc/imgs/deep-icon.png?raw=True)
 =================================================
 **MADlib<sup>&reg;</sup>** is an open-source library for scalable in-database analytics.
 It provides data-parallel implementations of mathematical, statistical and
 machine learning methods for structured and unstructured data.
 
-[![Build Status](https://ci-builds.apache.org/job/Madlib/job/madlib-build/job/madlib2-master/badge/icon)](https://ci-builds.apache.org/job/Madlib/job/madlib-build/job/madlib2-master/)
+Introduction
+============
+This repository is a fork of the open-source Apache MADlib project
+([apache/madlib](https://github.com/apache/madlib)), renamed to whpg-madlib and
+maintained for WarehousePG. The `madlib2-master` branch is based on upstream
+`madlib2-master` at commit `d03af81f` (Apache MADlib 2.1.0 plus later unreleased
+upstream changes), with the WarehousePG changes on top. Versions 2.2.0 and later
+are WarehousePG releases, not Apache MADlib releases.
 
 Installation and Contribution
 ==============================
@@ -18,6 +28,10 @@ please refer to the [MADlib Wiki](https://cwiki.apache.org/confluence/display/MA
 
 [Compiling from source on Linux](https://cwiki.apache.org/confluence/display/MADLIB/Installation+Guide#InstallationGuide-CompileFromSourceCompilingFromSource) details are
 also on the wiki.
+
+For this repository, see [CONTRIBUTING.md](CONTRIBUTING.md) and the
+[Code of Conduct](CODE-OF-CONDUCT.md). To report a security issue, see
+[SECURITY.md](SECURITY.md).
 
 
 Development with Docker
