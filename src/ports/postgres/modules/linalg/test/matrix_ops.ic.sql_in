@@ -45,6 +45,35 @@ DROP TABLE IF EXISTS s2;
 SELECT matrix_mult('s', 'row=row_id, col=col_id, val=val, trans=false',
                    's_t', 'row=row_num, col=col_num, val=val, trans=false', 's2');
 
+-- Boolean arguments are parsed with PostgreSQL's boolean input: 't' transposes
+-- like matrix_trans() does, and a value that is not a boolean is rejected.
+DROP TABLE IF EXISTS s_st, s_tt;
+SELECT matrix_mult('s', 'row=row_id, col=col_id, val=val',
+                   's_t', 'row=row_num, col=col_num, val=val, trans=false',
+                   's_st', 'row=row_id, col=col_id, val=val');
+SELECT matrix_mult('s', 'row=row_id, col=col_id, val=val',
+                   's', 'row=row_id, col=col_id, val=val, trans=t',
+                   's_tt', 'row=row_id, col=col_id, val=val');
+SELECT assert(count(*) = 0, 'trans=t must give the same product as matrix_trans()')
+FROM ((SELECT row_id, col_id, val FROM s_st WHERE val <> 0
+       EXCEPT SELECT row_id, col_id, val FROM s_tt WHERE val <> 0)
+      UNION ALL
+      (SELECT row_id, col_id, val FROM s_tt WHERE val <> 0
+       EXCEPT SELECT row_id, col_id, val FROM s_st WHERE val <> 0)) d;
+
+DO $$
+BEGIN
+    DROP TABLE IF EXISTS s_bad;
+    PERFORM matrix_mult('s', 'row=row_id, col=col_id, val=val, trans=maybe',
+                        's', 'row=row_id, col=col_id, val=val', 's_bad');
+    RAISE EXCEPTION 'trans=maybe was accepted';
+EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE '%trans%' OR SQLERRM = 'trans=maybe was accepted' THEN
+        RAISE;
+    END IF;
+END
+$$;
+
 DROP TABLE IF EXISTS dd;
 SELECT matrix_max('d', 'row=row_id', 1, 'dd', true);
 

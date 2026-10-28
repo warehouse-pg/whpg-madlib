@@ -69,3 +69,33 @@ SELECT _print_decision_tree(tree) from train_output;
 SELECT tree_display('train_output', False);
 SELECT get_var_importance('train_output', 'output_table');
 -------------------------------------------------------------------------
+
+-- tree_predict() turns the optimizer and hashagg off while it runs and has to
+-- put back the values it found, which it reads with current_setting(). Check
+-- that each comes back as it was, from on and from off.
+SET enable_hashagg = on;
+DROP TABLE IF EXISTS dt_pred;
+SELECT tree_predict('train_output', 'dt_golf', 'dt_pred', 'response');
+SELECT assert(current_setting('enable_hashagg') = 'on',
+              'tree_predict must restore enable_hashagg = on');
+SET enable_hashagg = off;
+DROP TABLE IF EXISTS dt_pred;
+SELECT tree_predict('train_output', 'dt_golf', 'dt_pred', 'response');
+SELECT assert(current_setting('enable_hashagg') = 'off',
+              'tree_predict must restore enable_hashagg = off');
+RESET enable_hashagg;
+
+m4_changequote(`<!', `!>')
+m4_ifdef(<!__POSTGRESQL__!>, <!!>, <!
+SET optimizer = on;
+DROP TABLE IF EXISTS dt_pred;
+SELECT tree_predict('train_output', 'dt_golf', 'dt_pred', 'response');
+SELECT assert(current_setting('optimizer') = 'on',
+              'tree_predict must restore optimizer = on');
+SET optimizer = off;
+DROP TABLE IF EXISTS dt_pred;
+SELECT tree_predict('train_output', 'dt_golf', 'dt_pred', 'response');
+SELECT assert(current_setting('optimizer') = 'off',
+              'tree_predict must restore optimizer = off');
+RESET optimizer;
+!>)
