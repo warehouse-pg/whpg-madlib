@@ -4,7 +4,6 @@ from datetime import datetime
 import re
 import time
 import random
-from distutils.util import strtobool
 # import numpy as np
 
 from utilities.validate_args import _get_table_schema_names
@@ -22,6 +21,26 @@ from utilities.validate_args import drop_tables
 import plpy
 
 m4_changequote(`<!', `!>')
+
+
+_text_to_bool_plan = None
+
+
+def text_to_bool(value):
+    """
+    Convert a text value to a bool with PostgreSQL's boolean input rules:
+    true, yes, on, 1 and false, no, off, 0, or a unique prefix of one of
+    them (so also t, f, y, n), case-insensitively. Raises ValueError for
+    anything else.
+    """
+    global _text_to_bool_plan
+    if _text_to_bool_plan is None:
+        _text_to_bool_plan = plpy.prepare(
+            "SELECT $1::pg_catalog.bool AS b", ["text"])
+    try:
+        return plpy.execute(_text_to_bool_plan, [value])[0]["b"]
+    except plpy.SPIError:
+        raise ValueError("invalid boolean value: {0}".format(value))
 
 
 def has_function_properties():
@@ -918,10 +937,10 @@ def extract_keyvalue_params(input_params,
                     continue
             try:
                 if param_type == bool:  # bool is not subclassable
-                    #  True values are y, yes, t, true, on and 1;
-                    #  False values are n, no, f, false, off and 0.
+                    #  PostgreSQL's boolean input: true/yes/on/1,
+                    #  false/no/off/0 and their unique prefixes.
                     #  Raises ValueError if anything else.
-                    parameter_dict[param_name] = bool(strtobool(param_value))
+                    parameter_dict[param_name] = text_to_bool(param_value)
                 elif param_type in (int, str, float):
                     parameter_dict[param_name] = param_type(param_value)
                 elif issubclass(param_type, collections.abc.Iterable):

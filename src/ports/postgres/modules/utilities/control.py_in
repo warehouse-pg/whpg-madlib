@@ -12,7 +12,6 @@
 import plpy
 import traceback
 
-from distutils.util import strtobool
 from functools import wraps
 
 from utilities.utilities import extract_keyvalue_params
@@ -123,14 +122,16 @@ class OptimizerControl(ContextDecorator):
         if self.guc_exists:
             # check if allowed to change the GUC
             try:
-                self.optimizer_control = bool(strtobool(
-                    plpy.execute("show optimizer_control")[0]["optimizer_control"]))
+                self.optimizer_control = plpy.execute(
+                    "SELECT current_setting('optimizer_control')::pg_catalog.bool"
+                    " AS v")[0]["v"]
             except plpy.SPIError:
                 self.optimizer_control = True
 
             if self.optimizer_control:
-                self.optimizer_enabled = bool(strtobool(
-                    plpy.execute("show optimizer")[0]["optimizer"]))
+                self.optimizer_enabled = plpy.execute(
+                    "SELECT current_setting('optimizer')::pg_catalog.bool"
+                    " AS v")[0]["v"]
                 new_optimizer = 'on' if self.to_enable else 'off'
                 plpy.execute("set optimizer={0}".format(new_optimizer))
             else:
@@ -168,8 +169,9 @@ class HashaggControl(ContextDecorator):
 
     def __enter__(self):
         try:
-            enable_hashagg = plpy.execute("show enable_hashagg")[0]["enable_hashagg"]
-            self.hashagg_enabled = bool(strtobool(enable_hashagg))
+            self.hashagg_enabled = plpy.execute(
+                "SELECT current_setting('enable_hashagg')::pg_catalog.bool"
+                " AS v")[0]["v"]
             plpy.execute("set enable_hashagg={0}".
                          format(('off', 'on')[self.to_enable]))
         except plpy.SPIError:
